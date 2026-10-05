@@ -1,0 +1,1 @@
+# Stock request/response schemas.
