@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16
+    container_name: optify-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-optify}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-optify}
+      POSTGRES_DB: ${POSTGRES_DB:-optify}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-optify} -d ${POSTGRES_DB:-optify}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - optify_pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ./backend
+    container_name: optify-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      # Inside Compose, the DB hostname is the service name `db`, not localhost.
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-optify}:${POSTGRES_PASSWORD:-optify}@db:5432/${POSTGRES_DB:-optify}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Mount source for uvicorn --reload during development.
+      - ./backend/app:/app/app
+
+  # Optional full-stack demo: docker compose --profile demo up -d --build
+  frontend:
+    profiles: ["demo"]
+    build:
+      context: ./frontend
+    container_name: optify-frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  optify_pgdata:

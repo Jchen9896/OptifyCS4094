@@ -1,0 +1,1 @@
+# Shared optimizer strategy interface.
