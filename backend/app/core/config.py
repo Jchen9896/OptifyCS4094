@@ -8,6 +8,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg2://optify:optify@localhost:5432/optify"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    market_data_interval: str = "1d"
+    market_data_auto_adjust: bool = True
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
