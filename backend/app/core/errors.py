@@ -6,3 +6,10 @@ class AppError(Exception):
         self.message = message
         self.code = code
         self.status_code = status_code
+
+
+class MarketDataUnavailableError(AppError):
+    """The market data source failed or did not respond."""
+
+    def __init__(self, message: str = "Market data is not available now. Try again later.") -> None:
+        super().__init__(message, code="market_data_unavailable", status_code=503)
