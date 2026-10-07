@@ -7,9 +7,9 @@ from typing import Any
 import yfinance
 
 from app.core.config import Settings
-from app.core.errors import MarketDataUnavailableError
+from app.core.errors import MarketDataUnavailableError, TickerNotFoundError
 from app.market_data.base import MarketDataProvider, PriceBar, StockInfo
-from app.market_data.normalizers import normalize_price_frame, normalize_stock_info
+from app.market_data.normalizers import QUOTE_TYPE_KEY, normalize_price_frame, normalize_stock_info
 
 
 class YFinanceProvider(MarketDataProvider):
@@ -37,7 +37,12 @@ class YFinanceProvider(MarketDataProvider):
         # at the provider boundary only, and change them to one application error.
         except Exception as error:
             raise MarketDataUnavailableError() from error
-        return normalize_stock_info(symbol, info or {})
+        info = info or {}
+        # yfinance does not raise an error for an unknown symbol. It returns
+        # data with no quote type. A known security always has a quote type.
+        if not info.get(QUOTE_TYPE_KEY):
+            raise TickerNotFoundError(symbol)
+        return normalize_stock_info(symbol, info)
 
     def get_price_history(self, symbol: str, start: date, end: date) -> list[PriceBar]:
         try:

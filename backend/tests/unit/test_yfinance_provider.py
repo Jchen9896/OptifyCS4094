@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from app.core.config import Settings
-from app.core.errors import MarketDataUnavailableError
+from app.core.errors import MarketDataUnavailableError, TickerNotFoundError
 from app.market_data.base import MarketDataProvider, PriceBar, StockInfo
 from app.market_data.yfinance_provider import YFinanceProvider, create_yfinance_provider
 
@@ -42,15 +42,28 @@ def test_provider_implements_interface():
 
 
 def test_get_stock_returns_internal_format():
-    ticker = FakeTicker(info={"longName": "Apple Inc.", "currency": "USD", "exchange": "NMS"})
+    ticker = FakeTicker(
+        info={"longName": "Apple Inc.", "currency": "USD", "exchange": "NMS", "quoteType": "EQUITY"}
+    )
 
     assert make_provider(ticker).get_stock("AAPL") == StockInfo(
-        symbol="AAPL", name="Apple Inc.", currency="USD", exchange="NMS"
+        symbol="AAPL", name="Apple Inc.", currency="USD", exchange="NMS", quote_type="EQUITY"
     )
 
 
-def test_get_stock_with_no_info_uses_fallback_values():
-    assert make_provider(FakeTicker(info=None)).get_stock("AAPL").name == "AAPL"
+def test_get_stock_with_no_name_uses_symbol():
+    assert make_provider(FakeTicker(info={"quoteType": "ETF"})).get_stock("SPY").name == "SPY"
+
+
+# yfinance 0.2.61 returns empty or near-empty info for an unknown symbol.
+@pytest.mark.parametrize("info", [None, {}, {"trailingPegRatio": None}])
+def test_get_stock_with_no_quote_type_raises_ticker_not_found(info):
+    with pytest.raises(TickerNotFoundError) as raised:
+        make_provider(FakeTicker(info=info)).get_stock("NOPE")
+
+    assert raised.value.code == "ticker_not_found"
+    assert raised.value.status_code == 404
+    assert "NOPE" in raised.value.message
 
 
 def test_get_price_history_returns_internal_format():

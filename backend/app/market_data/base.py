@@ -18,6 +18,7 @@ class StockInfo:
     name: str
     currency: str | None
     exchange: str | None
+    quote_type: str | None
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,10 @@ class MarketDataProvider(ABC):
 
     @abstractmethod
     def get_stock(self, symbol: str) -> StockInfo:
-        """Return basic data for `symbol`."""
+        """Return basic data for `symbol`.
+
+        Raise `TickerNotFoundError` if the source does not know `symbol`.
+        """
 
     @abstractmethod
     def get_price_history(self, symbol: str, start: date, end: date) -> list[PriceBar]:
