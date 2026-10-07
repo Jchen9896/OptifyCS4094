@@ -67,10 +67,16 @@ def test_empty_price_frame_gives_empty_list():
 
 
 def test_stock_info_uses_long_name_first():
-    info = {"longName": "Apple Inc.", "shortName": "Apple", "currency": "USD", "exchange": "NMS"}
+    info = {
+        "longName": "Apple Inc.",
+        "shortName": "Apple",
+        "currency": "USD",
+        "exchange": "NMS",
+        "quoteType": "EQUITY",
+    }
 
     assert normalize_stock_info("AAPL", info) == StockInfo(
-        symbol="AAPL", name="Apple Inc.", currency="USD", exchange="NMS"
+        symbol="AAPL", name="Apple Inc.", currency="USD", exchange="NMS", quote_type="EQUITY"
     )
 
 
@@ -84,3 +90,4 @@ def test_stock_info_missing_fields_are_none():
 
     assert stock.currency is None
     assert stock.exchange is None
+    assert stock.quote_type is None

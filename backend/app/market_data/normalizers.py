@@ -18,6 +18,7 @@ PRICE_COLUMNS = [OPEN_COLUMN, HIGH_COLUMN, LOW_COLUMN, CLOSE_COLUMN]
 NAME_KEYS = ["longName", "shortName"]
 CURRENCY_KEY = "currency"
 EXCHANGE_KEY = "exchange"
+QUOTE_TYPE_KEY = "quoteType"
 
 
 def normalize_price_frame(frame: pd.DataFrame) -> list[PriceBar]:
@@ -51,4 +52,5 @@ def normalize_stock_info(symbol: str, info: dict[str, Any]) -> StockInfo:
         name=name,
         currency=info.get(CURRENCY_KEY),
         exchange=info.get(EXCHANGE_KEY),
+        quote_type=info.get(QUOTE_TYPE_KEY),
     )
