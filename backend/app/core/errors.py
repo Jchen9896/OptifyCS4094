@@ -46,3 +46,14 @@ class UnsupportedSecurityError(AppError):
             code="unsupported_security",
             status_code=422,
         )
+
+
+class InvalidSearchQueryError(AppError):
+    """The search text is empty."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Enter a ticker or company name to search.",
+            code="invalid_search_query",
+            status_code=422,
+        )
