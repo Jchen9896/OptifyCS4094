@@ -4,6 +4,7 @@ import pytest
 
 from app.core.config import Settings
 from app.core.errors import (
+    InvalidSearchQueryError,
     InvalidTickerFormatError,
     MarketDataUnavailableError,
     TickerNotFoundError,
@@ -14,11 +15,12 @@ from app.services.stock_service import StockService
 
 
 class FakeProvider:
-    """Acts like a `MarketDataProvider`. It records each symbol and returns one stock or raises a set error."""
+    """Acts like a `MarketDataProvider`. It records each request and returns set data or raises a set error."""
 
-    def __init__(self, quote_type="EQUITY", error=None):
-        self.stock = StockInfo(symbol="X", name="X", currency=None, exchange=None, quote_type=quote_type)
+    def __init__(self, quote_type="EQUITY", error=None, results=()):
+        self.stock = make_stock(quote_type)
         self.error = error
+        self.results = list(results)
         self.symbols = []
 
     def get_stock(self, symbol):
@@ -27,11 +29,22 @@ class FakeProvider:
             raise self.error
         return self.stock
 
+    def search_stocks(self, query):
+        self.symbols.append(query)
+        return self.results
+
+
+def make_stock(quote_type, symbol="X"):
+    return StockInfo(symbol=symbol, name=symbol, currency=None, exchange=None, quote_type=quote_type)
+
+
+def make_service(provider):
+    settings = Settings(supported_security_types=" equity , etf ")
+    return StockService(provider, settings.ticker_pattern, settings.supported_security_type_list)
+
 
 def validate(provider, symbol="AAPL"):
-    settings = Settings(supported_security_types=" equity , etf ")
-    service = StockService(provider, settings.ticker_pattern, settings.supported_security_type_list)
-    return service.validate_ticker(symbol)
+    return make_service(provider).validate_ticker(symbol)
 
 
 @pytest.mark.parametrize("quote_type", ["EQUITY", "ETF"])
@@ -74,11 +87,29 @@ def test_provider_errors_pass_through(error):
         validate(FakeProvider(error=error))
 
 
+def test_search_trims_query_and_returns_only_supported_types():
+    results = [make_stock("EQUITY", "AAPL"), make_stock("INDEX", "^GSPC"), make_stock("ETF", "SPY")]
+    provider = FakeProvider(results=results)
+
+    assert make_service(provider).search_stocks("  apple ") == [results[0], results[2]]
+    assert provider.symbols == ["apple"]
+
+
+@pytest.mark.parametrize("query", ["", "   "])
+def test_empty_search_is_rejected_without_provider_call(query):
+    provider = FakeProvider()
+
+    with pytest.raises(InvalidSearchQueryError):
+        make_service(provider).search_stocks(query)
+    assert provider.symbols == []
+
+
 def test_each_failure_has_its_own_code_status_and_message():
     errors = [
         InvalidTickerFormatError("AAPL!"),
         TickerNotFoundError("NOPE"),
         UnsupportedSecurityError("^GSPC", "INDEX"),
+        InvalidSearchQueryError(),
         MarketDataUnavailableError(),
     ]
 
@@ -86,6 +117,7 @@ def test_each_failure_has_its_own_code_status_and_message():
         ("invalid_ticker_format", 422),
         ("ticker_not_found", 404),
         ("unsupported_security", 422),
+        ("invalid_search_query", 422),
         ("market_data_unavailable", 503),
     ]
     assert len({error.message for error in errors}) == len(errors)
