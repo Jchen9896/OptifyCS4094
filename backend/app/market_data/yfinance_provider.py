@@ -9,25 +9,35 @@ import yfinance
 from app.core.config import Settings
 from app.core.errors import MarketDataUnavailableError, TickerNotFoundError
 from app.market_data.base import MarketDataProvider, PriceBar, StockInfo
-from app.market_data.normalizers import QUOTE_TYPE_KEY, normalize_price_frame, normalize_stock_info
+from app.market_data.normalizers import (
+    QUOTE_TYPE_KEY,
+    normalize_price_frame,
+    normalize_search_quote,
+    normalize_stock_info,
+)
 
 
 class YFinanceProvider(MarketDataProvider):
     """Gets stock data from Yahoo Finance through yfinance.
 
     `ticker_factory` makes a ticker object for a symbol. The default is
-    `yfinance.Ticker`. Tests give a fake factory, so they do not use the network.
+    `yfinance.Ticker`. `search_factory` runs a search. The default is
+    `yfinance.Search`. Tests give fake factories, so they do not use the network.
     """
 
     def __init__(
         self,
         interval: str,
         auto_adjust: bool,
+        search_limit: int,
         ticker_factory: Callable[[str], Any] = yfinance.Ticker,
+        search_factory: Callable[..., Any] = yfinance.Search,
     ) -> None:
         self._interval = interval
         self._auto_adjust = auto_adjust
+        self._search_limit = search_limit
         self._ticker_factory = ticker_factory
+        self._search_factory = search_factory
 
     def get_stock(self, symbol: str) -> StockInfo:
         try:
@@ -60,10 +70,31 @@ class YFinanceProvider(MarketDataProvider):
             return []
         return normalize_price_frame(frame)
 
+    def search_stocks(self, query: str) -> list[StockInfo]:
+        try:
+            search = self._search_factory(
+                query,
+                max_results=self._search_limit,
+                # Get only stock results. Do not get news, lists, or private companies.
+                news_count=0,
+                lists_count=0,
+                include_cb=False,
+                recommended=0,
+            )
+        # See the comment in `get_stock` about why all errors are caught.
+        except Exception as error:
+            raise MarketDataUnavailableError() from error
+        # When Yahoo sends a bad answer, yfinance gives an empty response. An answer
+        # with no match still has data. Thus only an empty response is a provider error.
+        if not search.response:
+            raise MarketDataUnavailableError()
+        return [normalize_search_quote(quote) for quote in search.quotes]
+
 
 def create_yfinance_provider(settings: Settings) -> YFinanceProvider:
     """Make a `YFinanceProvider` with values from the application settings."""
     return YFinanceProvider(
         interval=settings.market_data_interval,
         auto_adjust=settings.market_data_auto_adjust,
+        search_limit=settings.market_data_search_limit,
     )
