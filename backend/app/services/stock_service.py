@@ -1,9 +1,9 @@
-"""Ticker validation service."""
+"""Ticker validation and stock search service."""
 
 import re
 
 from app.core.config import Settings
-from app.core.errors import InvalidTickerFormatError, UnsupportedSecurityError
+from app.core.errors import InvalidSearchQueryError, InvalidTickerFormatError, UnsupportedSecurityError
 from app.market_data.base import MarketDataProvider, StockInfo
 from app.market_data.yfinance_provider import create_yfinance_provider
 
@@ -34,6 +34,18 @@ class StockService:
         if stock.quote_type not in self._supported_types:
             raise UnsupportedSecurityError(symbol, stock.quote_type)
         return stock
+
+    def search_stocks(self, query: str) -> list[StockInfo]:
+        """Return the stocks of a supported type that match `query` by ticker or company name.
+
+        Return an empty list if no stock matches. Provider errors pass through.
+        """
+        text = query.strip()
+        if not text:
+            raise InvalidSearchQueryError()
+        stocks = self._provider.search_stocks(text)
+        # Show only stocks that the user can add. Validation uses the same types.
+        return [stock for stock in stocks if stock.quote_type in self._supported_types]
 
 
 def create_stock_service(settings: Settings) -> StockService:
