@@ -20,6 +20,10 @@ CURRENCY_KEY = "currency"
 EXCHANGE_KEY = "exchange"
 QUOTE_TYPE_KEY = "quoteType"
 
+# Keys in one provider search result. Search names use lower case keys.
+SYMBOL_KEY = "symbol"
+SEARCH_NAME_KEYS = ["longname", "shortname"]
+
 
 def normalize_price_frame(frame: pd.DataFrame) -> list[PriceBar]:
     """Convert a price table with a date index into price bars, oldest first.
@@ -53,4 +57,20 @@ def normalize_stock_info(symbol: str, info: dict[str, Any]) -> StockInfo:
         currency=info.get(CURRENCY_KEY),
         exchange=info.get(EXCHANGE_KEY),
         quote_type=info.get(QUOTE_TYPE_KEY),
+    )
+
+
+def normalize_search_quote(quote: dict[str, Any]) -> StockInfo:
+    """Convert one provider search result into `StockInfo`.
+
+    Search results have no currency. If a result has no name, the symbol is used as the name.
+    """
+    symbol = quote[SYMBOL_KEY]
+    name = next((quote[key] for key in SEARCH_NAME_KEYS if quote.get(key)), symbol)
+    return StockInfo(
+        symbol=symbol,
+        name=name,
+        currency=None,
+        exchange=quote.get(EXCHANGE_KEY),
+        quote_type=quote.get(QUOTE_TYPE_KEY),
     )

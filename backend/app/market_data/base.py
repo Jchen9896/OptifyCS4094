@@ -51,3 +51,10 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def get_price_history(self, symbol: str, start: date, end: date) -> list[PriceBar]:
         """Return daily prices for `symbol` from `start` to `end`, oldest first."""
+
+    @abstractmethod
+    def search_stocks(self, query: str) -> list[StockInfo]:
+        """Return stocks whose ticker or company name matches `query`, best match first.
+
+        Return an empty list if no stock matches.
+        """

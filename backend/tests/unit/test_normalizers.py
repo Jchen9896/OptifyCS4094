@@ -5,7 +5,7 @@ from datetime import date
 import pandas as pd
 
 from app.market_data.base import PriceBar, StockInfo
-from app.market_data.normalizers import normalize_price_frame, normalize_stock_info
+from app.market_data.normalizers import normalize_price_frame, normalize_search_quote, normalize_stock_info
 
 
 def make_frame(rows: dict[str, list], index: list[str], tz: str | None = None) -> pd.DataFrame:
@@ -91,3 +91,8 @@ def test_stock_info_missing_fields_are_none():
     assert stock.currency is None
     assert stock.exchange is None
     assert stock.quote_type is None
+
+
+def test_search_quote_falls_back_to_short_name_then_symbol():
+    assert normalize_search_quote({"symbol": "SPY", "shortname": "SPDR"}).name == "SPDR"
+    assert normalize_search_quote({"symbol": "SPY"}).name == "SPY"
