@@ -9,6 +9,7 @@ class OptimizationStrategy(ABC):
     """Calculates portfolio weights from inputs that are already validated.
 
     All strategies get the same inputs and return weights in ticker order.
+    A strategy ignores the inputs that it does not need.
     """
 
     name: str
@@ -19,5 +20,6 @@ class OptimizationStrategy(ABC):
         expected_returns: np.ndarray,
         covariance: np.ndarray,
         max_weight: float | None,
+        risk_free_rate: float,
     ) -> np.ndarray:
         """Return one weight for each stock. The weights add up to 1."""
