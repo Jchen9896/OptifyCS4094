@@ -1,6 +1,6 @@
 # Optify calculation spec and implementation plan
 
-Status: Steps 1–3, optimizer handoff (Step 4a), and the stored-history service contract (Step 4b) are implemented for review, with tests. The real storage reader, exchange-calendar adapter, and API remain pending. The price repository and historical-price model are still placeholders.
+Status: Steps 1–3, optimizer handoff (Step 4a), stored-history service contract (Step 4b), and real exchange-calendar adapter (Step 4c) are implemented for review, with tests. The real storage reader and API remain pending. The price repository and historical-price model are still placeholders.
 
 ## Summary
 
@@ -86,7 +86,9 @@ Step 4b adds `StoredCalculationService` in `backend/app/services/stored_calculat
 
 `PriceHistoryBatch` maps normalized tickers to `StoredPriceHistory`, containing existing `PriceBar` objects and optional `PriceHistoryMetadata`. Metadata fields are `source`, `retrieved_at`, `adjustment_basis`, `interval`, `exchange`, and `calendar`. Unknown facts remain `None`; they are not inferred from current settings. Valid histories require a nonempty source/exchange, timezone-aware retrieval time, adjustment basis `split_dividend_adjusted`, interval `1d`, and a calendar name matching the supplied calendar. Ingestion must assign the correct calendar for each exchange; matching names do not independently verify the exchange's schedule.
 
-The reader must report storage failures as `AppError(code="price_history_unavailable", status_code=503)`. Missing histories produce `insufficient_history` (422); missing or incompatible metadata produces `invalid_price_history` (422). Dropped shared periods produce a `dropped_intervals` warning alongside any risk warnings. Tests use in-memory reader/calendar implementations. No production reader or exchange calendar is installed by this step, so database and real-calendar integration remain incomplete.
+The reader must report storage failures as `AppError(code="price_history_unavailable", status_code=503)`. Missing histories produce `insufficient_history` (422); missing or incompatible metadata produces `invalid_price_history` (422). Dropped shared periods produce a `dropped_intervals` warning alongside any risk warnings. Step 4b tests use in-memory reader/calendar implementations. The production storage reader remains pending.
+
+Step 4c adds `ExchangeSessionCalendar` in `backend/app/market_data/session_calendar.py`, backed by `exchange-calendars>=4.11,<5`. Supply `ExchangeSessionCalendar("XNYS")` to `StoredCalculationService`. The wrapper returns ordinary Python dates in order, includes open start/end dates, and excludes weekends and exchange holidays. Schedule rules are local to the installed package; there are no calendar network calls. Unknown names raise `unsupported_calendar` (422), and periods outside the loaded schedule raise `unsupported_period` (422) with its supported bounds. The package loads a bounded schedule; its defaults may change with time or package updates. Tests verify real weekend/holiday schedules and missing-session handling through the calculation service. The API factory will select the configured calendar in the next step.
 
 ### Optimizer integration
 
