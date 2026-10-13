@@ -13,3 +13,17 @@ class InvalidOptimizationInputError(AppError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, code="invalid_optimization_input", status_code=422)
+
+
+class InfeasibleAllocationRulesError(AppError):
+    """The allocation rules cannot be met. For example, the maximum weight is too small for the number of stocks."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="infeasible_allocation_rules", status_code=422)
+
+
+class OptimizationFailedError(AppError):
+    """The solver did not find a reliable allocation for the inputs."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="optimization_failed", status_code=422)
