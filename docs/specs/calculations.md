@@ -1,6 +1,6 @@
 # Optify calculation spec and implementation plan
 
-Status: Steps 1–3 and the optimizer handoff (Step 4a) are implemented for review, with tests. Stored-history reading, calendar integration, and the API remain pending. The price repository and historical-price model are still placeholders.
+Status: Steps 1–3, optimizer handoff (Step 4a), and the stored-history service contract (Step 4b) are implemented for review, with tests. The real storage reader, exchange-calendar adapter, and API remain pending. The price repository and historical-price model are still placeholders.
 
 ## Summary
 
@@ -81,6 +81,12 @@ Use `PriceBar.close` only after those checks. Do not adjust the prices again. Th
 Joey's [SCRUM-11–13](https://vt-team-n8fy630g.atlassian.net/browse/SCRUM-13) provide retrieval, validation, and storage. Implement the thin reader adapter after that code is available. Until then, use an in-memory reader in tests; do not ship sample data as the production source. Production integration is a release dependency.
 
 The stored-history reader reads through the price repository. It must not call the market-data provider or `StockService.validate_ticker`, which contacts the provider. Data retrieval remains a separate operation.
+
+Step 4b adds `StoredCalculationService` in `backend/app/services/stored_calculation_service.py`. Its caller supplies a `PriceHistoryReader`, `SessionCalendar`, and annualization factor. `calculate(tickers, start_date, end_date)` normalizes tickers, rejects invalid requests before storage access, gets expected trading sessions, reads one batch, checks saved metadata, then calls the return and risk functions. It returns `CalculationResult` with the selected period, calendar, return/risk results, source metadata, and coded warnings. Feed `result.returns` and the selected dates to `prepare_optimization` for optimizer input.
+
+`PriceHistoryBatch` maps normalized tickers to `StoredPriceHistory`, containing existing `PriceBar` objects and optional `PriceHistoryMetadata`. Metadata fields are `source`, `retrieved_at`, `adjustment_basis`, `interval`, `exchange`, and `calendar`. Unknown facts remain `None`; they are not inferred from current settings. Valid histories require a nonempty source/exchange, timezone-aware retrieval time, adjustment basis `split_dividend_adjusted`, interval `1d`, and a calendar name matching the supplied calendar. Ingestion must assign the correct calendar for each exchange; matching names do not independently verify the exchange's schedule.
+
+The reader must report storage failures as `AppError(code="price_history_unavailable", status_code=503)`. Missing histories produce `insufficient_history` (422); missing or incompatible metadata produces `invalid_price_history` (422). Dropped shared periods produce a `dropped_intervals` warning alongside any risk warnings. Tests use in-memory reader/calendar implementations. No production reader or exchange calendar is installed by this step, so database and real-calendar integration remain incomplete.
 
 ### Optimizer integration
 
