@@ -1,6 +1,6 @@
 # Optify calculation spec and implementation plan
 
-Status: Steps 1 and 2 are implemented for review: daily returns, shared return periods across stocks, and average/annualized returns, with tests. Risk statistics, storage integration, and the API remain pending.
+Status: Steps 1–3 are implemented for review: daily returns, shared return periods, average/annualized returns, variance, covariance, and correlation, with tests. Storage integration, optimizer handoff, and the API remain pending.
 
 ## Summary
 
@@ -59,6 +59,8 @@ Implement pure functions in `backend/app/services/calculation_service.py`. Use t
 Step 1 adds `calculate_daily_returns(prices, sessions) -> list[DailyReturn]`. It accepts the existing `PriceBar` objects and an ordered, unique list of expected trading dates. Each result includes `start_date`, `end_date`, and a decimal `value`. Input prices can arrive in any order. Invalid dates, duplicate prices, nonpositive/non-finite closes, and non-finite returns raise `AppError` with code `invalid_price_history` and HTTP status 422. Empty or one-price histories return no intervals. The later combined calculation service still requires at least two aligned returns.
 
 Step 2 adds `calculate_return_summary(histories, tickers, sessions, annualization_factor) -> ReturnSummary`. It matches both dates of each return period across all selected stocks, preserves the supplied ticker order, and requires at least two shared periods. It returns the shared periods, daily return rows, daily/annualized means, annualization factor, observation count, and dropped-period count. The count of dropped periods is the number of consecutive pairs in the supplied session list minus the number used. The annualization factor is a required input; the later service will supply the configured default of 252. Empty/duplicate tickers and invalid factors give `invalid_calculation_input`; missing or insufficient shared prices give `insufficient_history`; non-finite averages give `invalid_calculation_result`. These errors use HTTP 422.
+
+Step 3 adds `calculate_risk_statistics(summary) -> RiskStatistics`. It uses Step 2's shared daily returns to calculate sample covariance (`ddof=1`) and its diagonal variances. Annualized covariance and variance use the same supplied annualization factor. Correlation is derived from daily covariance, is symmetric, and is not annualized. Rows and columns preserve `summary.tickers`, including a one-stock 1×1 matrix. Zero-variance stocks have `None` in all affected correlation cells, including the diagonal, plus a coded `undefined_correlation` warning naming the stock. The future API will serialize these missing cells as JSON `null`. Non-finite statistics raise `invalid_calculation_result` with HTTP 422.
 
 Expose an aggregate calculation function that accepts ticker order, dated adjusted-price observations, expected sessions, and the annualization factor. Return a typed result containing aligned returns, means, covariance, variance, correlation, and data-quality metadata. Christian's optimizer can consume annualized means and covariance directly without an HTTP call.
 
