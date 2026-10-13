@@ -1,9 +1,11 @@
 """Calculate returns from stored prices without database or provider calls."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from math import isfinite
+
+import numpy as np
 
 from app.core.errors import AppError
 from app.market_data.base import PriceBar
@@ -74,3 +76,98 @@ def calculate_daily_returns(
             )
         returns.append(DailyReturn(start_date=start, end_date=end, value=value))
     return returns
+
+
+@dataclass(frozen=True)
+class ReturnSummary:
+    """Returns and averages for the same periods across all selected stocks.
+
+    Rows in `daily_returns` follow `intervals`. Columns and averages follow
+    `tickers`. All returns are decimals, and annualization is arithmetic.
+    """
+
+    tickers: tuple[str, ...]
+    intervals: tuple[tuple[date, date], ...]
+    daily_returns: tuple[tuple[float, ...], ...]
+    daily_mean_returns: tuple[float, ...]
+    annualized_mean_returns: tuple[float, ...]
+    annualization_factor: float
+    dropped_interval_count: int
+
+    @property
+    def observation_count(self) -> int:
+        return len(self.intervals)
+
+
+def calculate_return_summary(
+    histories: Mapping[str, Sequence[PriceBar]],
+    tickers: Sequence[str],
+    sessions: Sequence[date],
+    annualization_factor: float,
+) -> ReturnSummary:
+    """Match daily intervals across stocks and calculate their mean returns.
+
+    The caller supplies normalized tickers and confirms the price basis and
+    trading calendar. At least two intervals must exist for every stock.
+    `annualization_factor` is the assumed trading sessions per year.
+    """
+    if not tickers or any(not ticker.strip() for ticker in tickers) or len(set(tickers)) != len(tickers):
+        raise AppError(
+            "Select at least one stock, with no empty or duplicate tickers.",
+            code="invalid_calculation_input",
+            status_code=422,
+        )
+    if not isfinite(annualization_factor) or annualization_factor <= 0:
+        raise AppError(
+            "The annualization factor must be finite and greater than zero.",
+            code="invalid_calculation_input",
+            status_code=422,
+        )
+
+    returns_by_ticker = {}
+    for ticker in tickers:
+        if ticker not in histories:
+            raise AppError(
+                f"No stored price history was supplied for {ticker}.",
+                code="insufficient_history",
+                status_code=422,
+            )
+        daily_returns = calculate_daily_returns(histories[ticker], sessions)
+        returns_by_ticker[ticker] = {
+            (item.start_date, item.end_date): item.value for item in daily_returns
+        }
+
+    shared_intervals = set(returns_by_ticker[tickers[0]])
+    for ticker in tickers[1:]:
+        shared_intervals.intersection_update(returns_by_ticker[ticker])
+    intervals = tuple(sorted(shared_intervals))
+    if len(intervals) < 2:
+        raise AppError(
+            "At least two daily return intervals must be available for every selected stock.",
+            code="insufficient_history",
+            status_code=422,
+        )
+
+    values = tuple(
+        tuple(returns_by_ticker[ticker][interval] for ticker in tickers)
+        for interval in intervals
+    )
+    with np.errstate(over="ignore", invalid="ignore"):
+        means = np.asarray(values, dtype=np.float64).mean(axis=0)
+        annualized_means = means * annualization_factor
+    if not (np.isfinite(means).all() and np.isfinite(annualized_means).all()):
+        raise AppError(
+            "The selected prices and annualization factor produce non-finite average returns.",
+            code="invalid_calculation_result",
+            status_code=422,
+        )
+
+    return ReturnSummary(
+        tickers=tuple(tickers),
+        intervals=intervals,
+        daily_returns=values,
+        daily_mean_returns=tuple(float(value) for value in means),
+        annualized_mean_returns=tuple(float(value) for value in annualized_means),
+        annualization_factor=annualization_factor,
+        dropped_interval_count=len(sessions) - 1 - len(intervals),
+    )
