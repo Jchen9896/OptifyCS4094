@@ -35,7 +35,9 @@ def validate_optimizer_input(data: OptimizerInput, tolerance: float) -> tuple[np
 
     if not (np.isfinite(expected_returns).all() and np.isfinite(covariance).all()):
         raise InvalidOptimizationInputError("The inputs contain missing or infinite values.")
-    if not np.allclose(covariance, covariance.T, atol=tolerance):
+    # rtol=0 turns off the extra percentage allowance that NumPy adds by default.
+    # Then `tolerance` is the only allowance, as in the other checks.
+    if not np.allclose(covariance, covariance.T, rtol=0, atol=tolerance):
         raise InvalidOptimizationInputError("The covariance matrix is not symmetric.")
     # A real covariance matrix never gives a portfolio a negative variance.
     # This is true only when its smallest eigenvalue is not negative.
