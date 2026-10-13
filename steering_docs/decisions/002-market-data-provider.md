@@ -18,7 +18,7 @@ Get all stock data through the `MarketDataProvider` interface in `backend/app/ma
 | No price rows | Empty list |
 | No stock name | Symbol is used as the name |
 
-Ticker validation is not part of this decision. A later user story adds it. Note: yfinance returns HTTP 404 for an unknown symbol, so at this time an unknown symbol also gives `MarketDataUnavailableError`.
+Ticker validation is not part of this decision. Refer to Decision 003. An unknown symbol gives `TickerNotFoundError` (404), not `MarketDataUnavailableError`.
 
 ## Add a new provider
 
