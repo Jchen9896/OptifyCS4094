@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     market_data_interval: str = "1d"
     market_data_auto_adjust: bool = True
     market_data_search_limit: int = 10
+    # Provenance and limits for stored price history (Decision 006).
+    market_data_source: str = "yfinance"
+    market_data_calendar: str = "XNYS"
+    market_data_max_span_days: int = 3650
     # Yahoo symbols use letters, digits, and ".", "-", "^", "=" (for example BRK-B, RY.TO).
     ticker_pattern: str = r"[A-Z0-9.\-^=]{1,15}"
     supported_security_types: str = "EQUITY,ETF"
@@ -28,6 +32,13 @@ class Settings(BaseSettings):
     @property
     def supported_security_type_list(self) -> list[str]:
         return [kind.strip().upper() for kind in self.supported_security_types.split(",") if kind.strip()]
+
+    @property
+    def market_data_adjustment_basis(self) -> str:
+        """How stored closes were adjusted when they were fetched."""
+        if self.market_data_auto_adjust:
+            return "split_dividend_adjusted"
+        return "raw"
 
 
 @lru_cache
