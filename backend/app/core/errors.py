@@ -78,3 +78,30 @@ class InvalidSearchQueryError(AppError):
             code="invalid_search_query",
             status_code=422,
         )
+
+
+class InvalidDateRangeError(AppError):
+    """The start date and end date cannot be used together."""
+
+    def __init__(self, message: str = "Choose a start date that is before the end date.") -> None:
+        super().__init__(message, code="invalid_date_range", status_code=422)
+
+
+class UnreliablePriceHistoryError(AppError):
+    """The price rows have gaps or values that are not safe to store."""
+
+    def __init__(
+        self,
+        message: str = "The price history has missing or invalid values. Choose another range or symbol.",
+    ) -> None:
+        super().__init__(message, code="unreliable_price_history", status_code=422)
+
+
+class InsufficientHistoryError(AppError):
+    """There are not enough price rows for the requested range."""
+
+    def __init__(
+        self,
+        message: str = "There is not enough price history for this symbol and date range.",
+    ) -> None:
+        super().__init__(message, code="insufficient_history", status_code=422)
