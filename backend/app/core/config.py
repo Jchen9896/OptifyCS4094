@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +15,8 @@ class Settings(BaseSettings):
     # Yahoo symbols use letters, digits, and ".", "-", "^", "=" (for example BRK-B, RY.TO).
     ticker_pattern: str = r"[A-Z0-9.\-^=]{1,15}"
     supported_security_types: str = "EQUITY,ETF"
+    calculation_calendar: str = "XNYS"
+    calculation_annualization_factor: float = Field(default=252, gt=0, allow_inf_nan=False)
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

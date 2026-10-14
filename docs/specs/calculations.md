@@ -1,6 +1,6 @@
 # Optify calculation spec and implementation plan
 
-Status: Steps 1–3, optimizer handoff (Step 4a), stored-history service contract (Step 4b), and real exchange-calendar adapter (Step 4c) are implemented for review, with tests. The real storage reader and API remain pending. The price repository and historical-price model are still placeholders.
+Status: Steps 1–3, optimizer handoff (Step 4a), stored-history service contract (Step 4b), real exchange-calendar adapter (Step 4c), and calculation API (Step 5a) are implemented for review, with tests. CI and real database integration remain pending. The price repository and historical-price model are still placeholders, and the default API reader returns 503 until it is replaced.
 
 ## Summary
 
@@ -124,6 +124,10 @@ POST /api/calculations
 ```
 
 Normalize ticker whitespace and case, preserve order, and reject empty or duplicate tickers. Require `start_date < end_date`.
+
+Step 5a registers the endpoint with native Pydantic request/response models in `backend/app/schemas/calculation.py`. The route supplies `StoredCalculationService` with a price-reader dependency and the real exchange calendar. Settings `CALCULATION_CALENDAR` (default `XNYS`) and `CALCULATION_ANNUALIZATION_FACTOR` (default `252`, positive and finite) are forwarded through Compose and documented in `.env.example`.
+
+`get_price_history_reader` currently returns a reader that reports `price_history_unavailable` (503). Replace that dependency with Joey's repository reader once storage is implemented. It never supplies sample prices in production. API tests replace only that reader and use the actual calendar, calculations, response models, and application error handler. Body shape/type errors use FastAPI's normal 422 validation response; errors from calculation services use the existing `AppError` envelope.
 
 The response contains:
 

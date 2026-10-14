@@ -26,6 +26,8 @@ services:
       # Inside Compose, the DB hostname is the service name `db`, not localhost.
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-optify}:${POSTGRES_PASSWORD:-optify}@db:5432/${POSTGRES_DB:-optify}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      CALCULATION_CALENDAR: ${CALCULATION_CALENDAR:-XNYS}
+      CALCULATION_ANNUALIZATION_FACTOR: ${CALCULATION_ANNUALIZATION_FACTOR:-252}
     depends_on:
       db:
         condition: service_healthy
