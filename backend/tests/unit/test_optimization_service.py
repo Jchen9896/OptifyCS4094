@@ -37,6 +37,7 @@ def _service(reader: FakeReader) -> OptimizationService:
         tolerance=1e-5,
         default_risk_free_rate=0.04,
         max_span_days=3650,
+        initial_capital=100_000.0,
     )
 
 
@@ -59,12 +60,16 @@ def test_run_returns_weights_and_metrics():
         strategy="minvar",
         max_weight=None,
         risk_free_rate=0.04,
+        current_weights=[0.5, 0.5],
     )
 
     assert result.strategy == "min_variance"
     assert abs(sum(result.weights.values()) - 1.0) < 1e-5
     assert set(result.weights) == {"AAA", "BBB"}
     assert result.volatility >= 0
+    assert result.initial_capital == 100_000.0
+    assert len(result.equity_curve) >= 2
+    assert result.equity_curve[0].current_value == pytest.approx(100_000.0)
     assert any("historical estimates" in item.lower() for item in result.assumptions)
 
 

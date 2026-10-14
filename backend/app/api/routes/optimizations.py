@@ -31,4 +31,5 @@ def run_optimization(
         strategy=body.strategy,
         max_weight=body.max_weight,
         risk_free_rate=body.risk_free_rate,
+        current_weights=body.current_weights,
     )
