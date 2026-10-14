@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import HistoryPeriodPanel from '../history-period/HistoryPeriodPanel.tsx'
 import StockSearch from '../stock-search/components/StockSearch.tsx'
 import type { StockSearchResult } from '../stock-search/stockApi.ts'
 import HoldingsTable from './components/HoldingsTable.tsx'
@@ -45,6 +46,16 @@ export default function PortfolioSetupPage() {
             }
             onRemove={(symbol) => setHoldings((current) => removeHolding(current, symbol))}
           />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-line bg-panel p-5">
+        <h2 className="text-lg font-medium text-paper">Set the historical period</h2>
+        <p className="mt-1 text-sm text-muted">
+          Choose start and end dates, then load adjusted daily prices for each selected asset.
+        </p>
+        <div className="mt-4">
+          <HistoryPeriodPanel holdings={holdings} />
         </div>
       </div>
     </section>
