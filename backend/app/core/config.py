@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     market_data_source: str = "yfinance"
     market_data_calendar: str = "XNYS"
     market_data_max_span_days: int = 3650
+    # Calculation and optimization defaults (Decision 005 portfolio optimizer).
+    annualization_factor: float = 252.0
+    optimization_tolerance: float = 1e-5
+    default_risk_free_rate: float = 0.04
     # Yahoo symbols use letters, digits, and ".", "-", "^", "=" (for example BRK-B, RY.TO).
     ticker_pattern: str = r"[A-Z0-9.\-^=]{1,15}"
     supported_security_types: str = "EQUITY,ETF"
