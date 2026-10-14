@@ -8,6 +8,13 @@ export type OptimizationRequest = {
   strategy: string
   maxWeight: number | null
   riskFreeRate: number | null
+  currentWeights: number[]
+}
+
+export type EquityCurvePoint = {
+  date: string
+  current_value: number
+  optimized_value: number
 }
 
 export type OptimizationResult = {
@@ -19,6 +26,8 @@ export type OptimizationResult = {
   period_start: string
   period_end: string
   assumptions: string[]
+  initial_capital: number
+  equity_curve: EquityCurvePoint[]
 }
 
 export type StoredOptimizationRun = {
@@ -42,6 +51,7 @@ export async function runOptimization(
       strategy: request.strategy,
       max_weight: request.maxWeight,
       risk_free_rate: request.riskFreeRate,
+      current_weights: request.currentWeights,
     }),
   })
 }

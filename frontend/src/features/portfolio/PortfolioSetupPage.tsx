@@ -101,6 +101,7 @@ export default function PortfolioSetupPage() {
             ? maxWeightPercent / 100
             : null,
         riskFreeRate: Number.isFinite(riskFreePercent) ? riskFreePercent / 100 : null,
+        currentWeights: holdings.map((holding) => holding.weightPercent / 100),
       })
       saveLastOptimizationRun({ result, holdings, portfolioName })
       navigate('/')
