@@ -30,11 +30,18 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
     if (typeof detail === 'object' && detail !== null) {
       throw new ApiError(detail.message ?? `Request failed (${response.status})`, detail.code ?? 'app_error', response.status)
     }
-    throw new ApiError(
-      typeof detail === 'string' ? detail : `Request failed (${response.status})`,
-      'app_error',
-      response.status,
-    )
+    if (typeof detail === 'string' && detail.length > 0) {
+      throw new ApiError(detail, 'app_error', response.status)
+    }
+    // Vite returns 502 when the /api proxy target (FastAPI on :8000) is down.
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new ApiError(
+        'The API is not reachable. Start FastAPI on port 8000 (for example: docker compose up -d api), then try again.',
+        'api_unreachable',
+        response.status,
+      )
+    }
+    throw new ApiError(`Request failed (${response.status})`, 'app_error', response.status)
   }
 
   return body as T
