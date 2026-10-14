@@ -23,6 +23,9 @@ export type OptimizationResult = {
   expected_return: number
   volatility: number
   sharpe_ratio: number
+  current_expected_return: number
+  current_volatility: number
+  current_sharpe_ratio: number
   period_start: string
   period_end: string
   assumptions: string[]
