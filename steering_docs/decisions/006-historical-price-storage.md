@@ -6,11 +6,12 @@ Store daily prices in PostgreSQL so the application can reuse them for analysis 
 
 - Fetch prices only through `MarketDataProvider.get_price_history` (Decision 002).
 - Confirm the ticker with `StockService.validate_ticker` before fetch and before insert (Decision 003).
-- Persist shared market data in `stocks` and `price_bars` (see database design v3).
+- Persist shared market data in `stocks` and `price_bars` as in database design v3 (shared dataset; all users read the same rows).
 - Upsert `price_bars` on primary key `(symbol, date)`. A second retrieval for the same day updates the row. It does not create a duplicate.
 - Write order: upsert `stocks`, then upsert `price_bars` (foreign key on `symbol`).
+- Prefer the database for user-facing history. Read `list_range` first. Call the provider only when stored rows do not cover the requested range (or when no rows exist). Do not call yfinance on every request when the data is already stored.
 - One HTTP request handles one symbol. The client may call again for each selected stock.
-- Expose `POST /api/market-data/history` with `symbol`, `start_date`, and `end_date`. Do not add a public GET in this work. A repository `list_range` supports tests and later calculation reads.
+- Expose `POST /api/market-data/history` with `symbol`, `start_date`, and `end_date`. Do not add a public GET in this work. A repository `list_range` supports tests, DB-first reads, and later calculation reads.
 
 ## Provenance
 
@@ -45,10 +46,11 @@ Incomplete OHLC rows are already removed in `normalize_price_frame`.
 
 Holiday-aware missing-session detection needs an exchange calendar. That work belongs with the calculation session list (Decision 005). This decision does not add `exchange_calendars`.
 
-Staleness refresh, multi-symbol batch APIs, users, portfolios, and the calculation HTTP API are out of scope here.
+A full staleness policy (refresh when `fetched_at` is too old) is deferred. Until then, treat existing rows for a date as reusable. Multi-symbol batch APIs, users, portfolios, and the calculation HTTP API are out of scope here.
 
 ## Why
 
-- Reuse the existing provider and ticker validation. Do not add a second data path.
+- Database design v3 keeps market data shared. Serving stored bars avoids repeat provider calls for every user.
+- Reuse the existing provider and ticker validation for fills and first-time loads. Do not add a second data path.
 - Save provenance on the price row so calculation reads can reject incompatible history later.
 - Keep each change small and reviewable. One symbol per request keeps errors simple.
