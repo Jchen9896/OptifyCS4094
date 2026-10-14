@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { ApiError } from '../../../lib/apiClient.ts'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Field, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { ApiError } from '@/lib/apiClient'
 import { searchStocks, type StockSearchResult } from '../stockApi.ts'
 
 type StockSearchProps = {
@@ -39,11 +43,12 @@ export default function StockSearch({ onAdd, disabledSymbols }: StockSearchProps
 
   return (
     <div className="space-y-3">
-      <label className="block text-sm text-muted">
-        Search by ticker or company name
-        <div className="mt-1 flex gap-2">
-          <input
-            className="min-w-0 flex-1 rounded-lg border border-line bg-ink px-3 py-2 text-paper outline-none focus:border-sky"
+      <Field>
+        <FieldLabel htmlFor="stock-search">Search by ticker or company name</FieldLabel>
+        <div className="flex gap-2">
+          <Input
+            id="stock-search"
+            className="min-w-0 flex-1"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
@@ -52,44 +57,44 @@ export default function StockSearch({ onAdd, disabledSymbols }: StockSearchProps
                 void runSearch()
               }
             }}
-            placeholder="AAPL or Apple"
+            placeholder="NVDA or NVIDIA"
           />
-          <button
-            type="button"
-            className="rounded-lg bg-mint px-4 py-2 text-sm font-medium text-ink disabled:opacity-50"
-            onClick={() => void runSearch()}
-            disabled={loading}
-          >
+          <Button type="button" onClick={() => void runSearch()} disabled={loading}>
             {loading ? 'Searching…' : 'Search'}
-          </button>
+          </Button>
         </div>
-      </label>
+      </Field>
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {results.length > 0 && (
-        <ul className="divide-y divide-line rounded-lg border border-line">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card">
           {results.map((stock) => {
             const alreadyAdded = disabledSymbols?.has(stock.symbol) ?? false
             return (
-              <li key={stock.symbol} className="flex items-center justify-between gap-3 px-3 py-2">
+              <li key={stock.symbol} className="flex items-center justify-between gap-3 px-3 py-2.5">
                 <div>
-                  <p className="font-medium text-paper">
+                  <p className="text-sm font-medium">
                     {stock.symbol}
-                    <span className="ml-2 font-normal text-muted">{stock.name}</span>
+                    <span className="ml-2 font-normal text-muted-foreground">{stock.name}</span>
                   </p>
-                  <p className="text-xs text-muted">
+                  <p className="text-xs text-muted-foreground">
                     {[stock.exchange, stock.quote_type].filter(Boolean).join(' · ') || '—'}
                   </p>
                 </div>
-                <button
+                <Button
                   type="button"
-                  className="rounded-md border border-line px-3 py-1 text-sm text-mint disabled:text-muted"
+                  variant="outline"
+                  size="sm"
                   disabled={alreadyAdded}
                   onClick={() => onAdd(stock)}
                 >
                   {alreadyAdded ? 'Added' : '+ Add'}
-                </button>
+                </Button>
               </li>
             )
           })}
