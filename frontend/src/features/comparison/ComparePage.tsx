@@ -71,7 +71,7 @@ export default function ComparePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline">Refine blueprint</Button>
+          <Button>Refine blueprint</Button>
           <Button>Run analysis</Button>
         </div>
       </div>
@@ -236,7 +236,7 @@ export default function ComparePage() {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">Refine blueprint</Button>
+            <Button>Refine blueprint</Button>
             <Button disabled>Run analysis</Button>
           </div>
         </CardFooter>
