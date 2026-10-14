@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table'
 import { formatPercent, formatWeight } from '@/lib/formatters.ts'
 import { loadLastOptimizationRun } from '../optimization/optimizationApi.ts'
+import PortfolioPerformanceCharts from './PortfolioPerformanceCharts.tsx'
 
 export default function DashboardPage() {
   const run = useMemo(() => loadLastOptimizationRun(), [])
@@ -110,6 +111,27 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {result.equity_curve?.length ? (
+        <PortfolioPerformanceCharts
+          equityCurve={result.equity_curve}
+          initialCapital={result.initial_capital}
+          weightRows={weightRows.map((row) => ({
+            symbol: row.symbol,
+            current: currentBySymbol[row.symbol] ?? 0,
+            optimized: row.weight,
+          }))}
+        />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Performance charts</CardTitle>
+            <CardDescription>
+              Re-run analysis from Portfolio setup to load capital and weight charts.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
