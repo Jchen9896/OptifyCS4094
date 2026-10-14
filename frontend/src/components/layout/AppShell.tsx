@@ -34,8 +34,8 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
     isActive
-      ? 'bg-primary text-primary-foreground'
-      : 'text-foreground hover:bg-muted',
+      ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+      : 'text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
   )
 
 export default function AppShell() {
@@ -46,16 +46,26 @@ export default function AppShell() {
     <div className="flex min-h-svh bg-background">
       <aside className="flex w-[232px] shrink-0 flex-col border-r border-border bg-sidebar px-5 py-6 text-sidebar-foreground">
         <div className="mb-8 flex items-center gap-2.5">
-          <span className="inline-block size-7 rounded-md bg-primary" />
-          <span className="text-lg font-semibold tracking-tight">Optify</span>
+          <span
+            className="inline-block size-7 rounded-md"
+            style={{
+              background: 'linear-gradient(135deg, #68c3d4 0%, #ffe8d1 100%)',
+            }}
+          />
+          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">
+            Optify
+          </span>
         </div>
 
-        <Button variant="outline" className="mb-6 h-auto w-full justify-between px-3 py-2.5 font-normal">
+        <Button
+          variant="outline"
+          className="mb-6 h-auto w-full justify-between border-sidebar-border bg-sidebar-accent px-3 py-2.5 font-normal text-sidebar-accent-foreground hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground"
+        >
           Sample portfolio
-          <span className="text-muted-foreground">▾</span>
+          <span className="text-sidebar-foreground/60">▾</span>
         </Button>
 
-        <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
           Portfolio
         </p>
         <nav className="flex flex-col gap-1">
@@ -73,34 +83,41 @@ export default function AppShell() {
           </NavLink>
         </nav>
 
-        <p className="mt-8 mb-2 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        <p className="mt-8 mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
           Learn
         </p>
         <nav className="flex flex-col gap-1">
-          <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground">
+          <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/55">
             <BookOpen className="size-4" />
             Learn
           </span>
         </nav>
 
-        <div className="mt-auto space-y-1 border-t border-border pt-4">
-          <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground">
+        <div className="mt-auto flex flex-col gap-1 border-t border-sidebar-border pt-4">
+          <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/55">
             <Settings className="size-4" />
             Preferences
           </span>
-          <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground">
+          <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/55">
             <HelpCircle className="size-4" />
             Help center
           </span>
           <div className="mt-3 flex items-center gap-3 px-1 pt-2">
             <Avatar size="sm">
-              <AvatarFallback>RI</AvatarFallback>
+              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
+                RI
+              </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">Retail investor</p>
-              <p className="truncate text-xs text-muted-foreground">Sample portfolio</p>
+              <p className="truncate text-sm font-medium text-sidebar-foreground">Retail investor</p>
+              <p className="truncate text-xs text-sidebar-foreground/55">Sample portfolio</p>
             </div>
-            <Button variant="ghost" size="icon-sm" asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              asChild
+            >
               <NavLink to="/login" aria-label="Sign out">
                 <LogOut className="size-4" />
               </NavLink>
@@ -109,8 +126,8 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-20 items-center justify-between border-b border-border bg-card px-8">
+      <div className="flex min-w-0 flex-1 flex-col bg-background">
+        <header className="flex h-20 items-center justify-between border-0 bg-background px-8">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
@@ -125,13 +142,18 @@ export default function AppShell() {
           <div className="flex items-center gap-3">
             <div className="relative hidden w-64 md:block">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-8" placeholder="Search assets..." readOnly />
+              <Input className="border-border bg-card pl-8" placeholder="Search assets..." readOnly />
             </div>
-            <Button variant="outline" size="icon" aria-label="Notifications">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Notifications"
+              className="border-transparent bg-accent text-accent-foreground hover:bg-accent/90 hover:text-accent-foreground"
+            >
               <Bell className="size-4" />
             </Button>
             <Avatar size="sm">
-              <AvatarFallback>RI</AvatarFallback>
+              <AvatarFallback className="bg-accent text-accent-foreground">RI</AvatarFallback>
             </Avatar>
           </div>
         </header>
