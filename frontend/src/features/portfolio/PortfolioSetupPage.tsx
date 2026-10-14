@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import StockSearch from '../stock-search/components/StockSearch.tsx'
 import type { StockSearchResult } from '../stock-search/stockApi.ts'
-import { addHolding } from './holdings.ts'
+import HoldingsTable from './components/HoldingsTable.tsx'
+import { addHolding, removeHolding, updateHoldingWeight } from './holdings.ts'
 import type { Holding } from './types.ts'
 
 export default function PortfolioSetupPage() {
@@ -31,17 +32,20 @@ export default function PortfolioSetupPage() {
       </div>
 
       <div className="rounded-xl border border-line bg-panel p-5">
-        <h2 className="text-lg font-medium text-paper">Select assets</h2>
-        <p className="mt-1 text-sm text-muted">Search, then add tickers to the local list.</p>
+        <h2 className="text-lg font-medium text-paper">Select assets and set weights</h2>
+        <p className="mt-1 text-sm text-muted">Search, add tickers, then set weights that total 100%.</p>
         <div className="mt-4">
           <StockSearch onAdd={handleAdd} disabledSymbols={disabledSymbols} />
         </div>
-        {holdings.length > 0 && (
-          <p className="mt-4 text-sm text-muted">
-            {holdings.length} asset{holdings.length === 1 ? '' : 's'} selected. Weight editing lands
-            next.
-          </p>
-        )}
+        <div className="mt-6">
+          <HoldingsTable
+            holdings={holdings}
+            onWeightChange={(symbol, weightPercent) =>
+              setHoldings((current) => updateHoldingWeight(current, symbol, weightPercent))
+            }
+            onRemove={(symbol) => setHoldings((current) => removeHolding(current, symbol))}
+          />
+        </div>
       </div>
     </section>
   )
