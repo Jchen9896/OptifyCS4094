@@ -105,3 +105,27 @@ class InsufficientHistoryError(AppError):
         message: str = "There is not enough price history for this symbol and date range.",
     ) -> None:
         super().__init__(message, code="insufficient_history", status_code=422)
+
+
+class InvalidCalculationInputError(AppError):
+    """The calculation request or configuration is not usable."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="invalid_calculation_input", status_code=422)
+
+
+class InvalidPriceHistoryError(AppError):
+    """Stored prices cannot be used for return calculations."""
+
+    def __init__(
+        self,
+        message: str = "The price history has invalid values for calculation.",
+    ) -> None:
+        super().__init__(message, code="invalid_price_history", status_code=422)
+
+
+class InvalidCalculationResultError(AppError):
+    """A calculation produced a non-finite or unusable result."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="invalid_calculation_result", status_code=422)

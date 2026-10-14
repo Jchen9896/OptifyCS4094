@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -18,7 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ApiError } from '@/lib/apiClient'
 import HistoryPeriodPanel from '../history-period/HistoryPeriodPanel.tsx'
+import {
+  runOptimization,
+  saveLastOptimizationRun,
+} from '../optimization/optimizationApi.ts'
 import StockSearch from '../stock-search/components/StockSearch.tsx'
 import type { StockSearchResult } from '../stock-search/stockApi.ts'
 import HoldingsTable from './components/HoldingsTable.tsx'
@@ -31,23 +38,39 @@ import {
 } from './holdings.ts'
 import { TARGET_WEIGHT_TOTAL, type Holding } from './types.ts'
 
+function defaultEndDate(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function defaultStartDate(): string {
+  const end = new Date()
+  const start = new Date(end)
+  start.setFullYear(end.getFullYear() - 1)
+  return start.toISOString().slice(0, 10)
+}
+
 export default function PortfolioSetupPage() {
+  const navigate = useNavigate()
   const [portfolioName, setPortfolioName] = useState('Sample portfolio')
   const [notionalValue, setNotionalValue] = useState('248500')
-  const [strategy, setStrategy] = useState('mvo')
-  const [objective, setObjective] = useState('sharpe')
+  const [strategy, setStrategy] = useState('minvar')
+  const [objective, setObjective] = useState('variance')
   const [maxWeight, setMaxWeight] = useState('45')
   const [keepAsset, setKeepAsset] = useState(true)
   const [mustKeep, setMustKeep] = useState('AGG')
   const [minWeight, setMinWeight] = useState('5')
   const [riskFree, setRiskFree] = useState('4')
   const [holdings, setHoldings] = useState<Holding[]>([])
+  const [startDate, setStartDate] = useState(defaultStartDate)
+  const [endDate, setEndDate] = useState(defaultEndDate)
+  const [running, setRunning] = useState(false)
+  const [runError, setRunError] = useState<string | null>(null)
 
   const disabledSymbols = useMemo(
     () => new Set(holdings.map((holding) => holding.symbol)),
     [holdings],
   )
-  const readyForAnalysis = holdings.length > 0 && weightsAreComplete(holdings)
+  const readyForAnalysis = holdings.length >= 2 && weightsAreComplete(holdings)
 
   function handleAdd(stock: StockSearchResult) {
     setHoldings((current) =>
@@ -57,6 +80,38 @@ export default function PortfolioSetupPage() {
         quoteType: stock.quote_type,
       }),
     )
+  }
+
+  async function handleRunAnalysis() {
+    if (!readyForAnalysis) {
+      return
+    }
+    setRunning(true)
+    setRunError(null)
+    const maxWeightPercent = Number(maxWeight)
+    const riskFreePercent = Number(riskFree)
+    try {
+      const result = await runOptimization({
+        tickers: holdings.map((holding) => holding.symbol),
+        startDate,
+        endDate,
+        strategy,
+        maxWeight:
+          Number.isFinite(maxWeightPercent) && maxWeightPercent > 0
+            ? maxWeightPercent / 100
+            : null,
+        riskFreeRate: Number.isFinite(riskFreePercent) ? riskFreePercent / 100 : null,
+        currentWeights: holdings.map((holding) => holding.weightPercent / 100),
+      })
+      saveLastOptimizationRun({ result, holdings, portfolioName })
+      navigate('/')
+    } catch (caught) {
+      setRunError(
+        caught instanceof ApiError ? `${caught.code}: ${caught.message}` : 'Optimization failed.',
+      )
+    } finally {
+      setRunning(false)
+    }
   }
 
   return (
@@ -141,7 +196,13 @@ export default function PortfolioSetupPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <HistoryPeriodPanel holdings={holdings} />
+              <HistoryPeriodPanel
+                holdings={holdings}
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
+              />
             </CardContent>
           </Card>
         </div>
@@ -159,8 +220,8 @@ export default function PortfolioSetupPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="mvo">Mean-Variance Optimization</SelectItem>
                     <SelectItem value="minvar">Minimum variance</SelectItem>
+                    <SelectItem value="mvo">Mean-Variance (uses min variance in MVP)</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -231,8 +292,7 @@ export default function PortfolioSetupPage() {
                 />
               </Field>
               <FieldDescription>
-                Settings are captured in the UI. Optimization runs when the backend endpoint is
-                connected.
+                Load prices for the selected period first. The run uses stored bars only.
               </FieldDescription>
             </FieldGroup>
           </CardContent>
@@ -242,25 +302,31 @@ export default function PortfolioSetupPage() {
       <Card>
         <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-medium">Ready to review the sample</p>
+            <p className="font-medium">Ready to run analysis</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {holdings.length} assets · Weights {sumWeights(holdings).toFixed(0)}% /{' '}
               {TARGET_WEIGHT_TOTAL}% · Max {maxWeight}% · Risk-free rate {riskFree}%
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Optify is a decision-support tool. Inputs and results on this page may be illustrative.
+              Results are historical estimates for {startDate} to {endDate}, not guaranteed outcomes.
             </p>
+            {runError && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>{runError}</AlertDescription>
+              </Alert>
+            )}
           </div>
           <Button
             type="button"
-            disabled
+            disabled={!readyForAnalysis || running}
             title={
               readyForAnalysis
-                ? 'Optimization API is not available yet.'
-                : 'Add assets and set weights to 100% first.'
+                ? 'Run minimum-variance optimization on stored prices.'
+                : 'Add at least two assets and set weights to 100% first.'
             }
+            onClick={() => void handleRunAnalysis()}
           >
-            Review & run analysis
+            {running ? 'Running…' : 'Review & run analysis'}
           </Button>
         </CardFooter>
       </Card>
