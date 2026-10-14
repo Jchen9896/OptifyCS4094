@@ -70,6 +70,8 @@ def test_run_returns_weights_and_metrics():
     assert result.initial_capital == 100_000.0
     assert len(result.equity_curve) >= 2
     assert result.equity_curve[0].current_value == pytest.approx(100_000.0)
+    assert result.current_expected_return is not None
+    assert result.current_volatility >= 0
     assert any("historical estimates" in item.lower() for item in result.assumptions)
 
 

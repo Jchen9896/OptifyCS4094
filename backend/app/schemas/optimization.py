@@ -50,6 +50,9 @@ class OptimizationResult(BaseModel):
     expected_return: float
     volatility: float
     sharpe_ratio: float
+    current_expected_return: float
+    current_volatility: float
+    current_sharpe_ratio: float
     period_start: date
     period_end: date
     assumptions: list[str]
