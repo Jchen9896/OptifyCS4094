@@ -6,6 +6,7 @@ import numpy as np
 from app.core.errors import OptimizationFailedError
 from app.optimization.base import OptimizationStrategy
 from app.optimization.constraints import (
+    check_can_beat_risk_free_rate,
     check_rules_feasible,
     clean_weights,
     find_rule_violations,
@@ -74,3 +75,44 @@ class MinimumVarianceStrategy(OptimizationStrategy):
         _solve(cp.Problem(cp.Minimize(risk), constraints))
 
         return _clean_and_check(weights.value, max_weight, self._tolerance)
+
+
+class MaxSharpeStrategy(OptimizationStrategy):
+    """Finds the allocation with the highest Sharpe ratio that follows the allocation rules.
+
+    The Sharpe ratio is (expected return - risk-free rate) / volatility. CVXPY cannot maximize a ratio directly,
+    so this strategy uses the Schaible transform (Palomar, section 7.2). It scales the weights so that the
+    excess return is 1, finds the scaled weights with the lowest risk, and then scales them back.
+    """
+
+    name = "max_sharpe"
+
+    def __init__(self, tolerance: float) -> None:
+        self._tolerance = tolerance
+
+    def compute_weights(
+        self,
+        expected_returns: np.ndarray,
+        covariance: np.ndarray,
+        max_weight: float | None,
+        risk_free_rate: float,
+    ) -> np.ndarray:
+        """Return the maximum-Sharpe weights in ticker order.
+
+        The inputs must already be checked by `validate_optimizer_input`.
+        """
+        asset_count = covariance.shape[0]
+        check_rules_feasible(asset_count, max_weight, self._tolerance)
+        check_can_beat_risk_free_rate(expected_returns, risk_free_rate, max_weight, self._tolerance)
+
+        # The real weights times one positive number. The rules below make the excess return exactly 1.
+        scaled_weights = cp.Variable(asset_count)
+        # psd_wrap: refer to MinimumVarianceStrategy.
+        risk = cp.quad_form(scaled_weights, cp.psd_wrap(covariance))
+        excess_returns = expected_returns - risk_free_rate
+        constraints = [excess_returns @ scaled_weights == 1, *weight_constraints(scaled_weights, max_weight)]
+        _solve(cp.Problem(cp.Minimize(risk), constraints))
+
+        # Divide by the total to get the real weights, which add up to 1.
+        weights = scaled_weights.value / scaled_weights.value.sum()
+        return _clean_and_check(weights, max_weight, self._tolerance)
