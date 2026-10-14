@@ -1,6 +1,6 @@
 # Optify calculation spec and implementation plan
 
-Status: Steps 1–3 are implemented for review: daily returns, shared return periods, average/annualized returns, variance, covariance, and correlation, with tests. Storage integration, optimizer handoff, and the API remain pending.
+Status: Steps 1–3 and the optimizer handoff (Step 4a) are implemented for review, with tests. Stored-history reading, calendar integration, and the API remain pending. The price repository and historical-price model are still placeholders.
 
 ## Summary
 
@@ -96,6 +96,8 @@ Map calculation results into the existing `OptimizerInput`:
 Use annual decimal units for returns and covariance. A supplied risk-free rate must also be an annual decimal. The optimization service supplies `strategy`, `max_weight`, and `risk_free_rate`; the calculation module does not choose them.
 
 The optimization service must assemble and validate `OptimizerInput` with `validate_optimizer_input`, then pass the resulting NumPy arrays to `OptimizationStrategy.compute_weights`. Preserve the same ticker order in each vector and both matrix axes. Single-stock calculations remain supported, but optimizer handoff requires at least two stocks. Carry the calculation assumptions into `OptimizationResult.assumptions`.
+
+Step 4a adds `prepare_optimization(summary, *, period_start, period_end, strategy, tolerance, max_weight=None, risk_free_rate=None)` in `backend/app/services/optimization_input_service.py`. It calculates risk from the same return summary, fills the existing `OptimizerInput` with annualized statistics, and runs the existing optimizer validator. It returns `PreparedOptimization`, containing `optimizer_input` and readable `assumptions` for the optimization service to copy into its result. Requested dates can be wider than the observed dates, but must contain all return intervals. Single-stock handoffs, invalid options, and non-finite risk-free rates raise the existing `InvalidOptimizationInputError` (HTTP 422). This step does not query storage, execute a strategy, or choose defaults for optimizer options. The stored-history part of Step 4 is still pending.
 
 ### HTTP endpoint
 
