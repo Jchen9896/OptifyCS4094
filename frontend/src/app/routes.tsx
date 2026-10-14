@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell.tsx'
+import PortfolioSetupPage from '../features/portfolio/PortfolioSetupPage.tsx'
 
 function PlaceholderPage({ title, description }: { title: string; description: string }) {
   return (
@@ -23,15 +24,7 @@ export function AppRoutes() {
             />
           }
         />
-        <Route
-          path="setup"
-          element={
-            <PlaceholderPage
-              title="Portfolio setup"
-              description="Choose assets, weights, and a historical period. Search and history controls land in the next commits."
-            />
-          }
-        />
+        <Route path="setup" element={<PortfolioSetupPage />} />
         <Route
           path="compare"
           element={
