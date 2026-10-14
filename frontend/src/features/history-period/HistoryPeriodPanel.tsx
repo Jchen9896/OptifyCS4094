@@ -1,5 +1,18 @@
 import { useState } from 'react'
-import { ApiError } from '../../lib/apiClient.ts'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ApiError } from '@/lib/apiClient'
 import type { Holding } from '../portfolio/types.ts'
 import { fetchPriceHistory, type PriceHistoryResponse } from './historyApi.ts'
 
@@ -57,7 +70,7 @@ export default function HistoryPeriodPanel({ holdings }: HistoryPeriodPanelProps
         nextRows.push({
           symbol: holding.symbol,
           status: 'ok',
-          summary: `${result.bar_count} bars · ${span} · ${result.source}`,
+          summary: `${result.bar_count} bars · ${span}`,
           servedFromDatabase: result.served_from_database,
         })
       } catch (caught) {
@@ -75,66 +88,78 @@ export default function HistoryPeriodPanel({ holdings }: HistoryPeriodPanelProps
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm text-muted">
-          Start date
-          <input
+      <FieldGroup className="grid gap-4 sm:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="start-date">Start date</FieldLabel>
+          <Input
+            id="start-date"
             type="date"
-            className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-paper"
             value={startDate}
             onChange={(event) => setStartDate(event.target.value)}
           />
-        </label>
-        <label className="block text-sm text-muted">
-          End date
-          <input
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="end-date">End date</FieldLabel>
+          <Input
+            id="end-date"
             type="date"
-            className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-paper"
             value={endDate}
             onChange={(event) => setEndDate(event.target.value)}
           />
-        </label>
+        </Field>
+      </FieldGroup>
+
+      <Button type="button" onClick={() => void loadPrices()} disabled={loading}>
+        {loading ? 'Loading prices…' : 'Load prices'}
+      </Button>
+
+      {formError && (
+        <Alert variant="destructive">
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
+      )}
+
+      <div>
+        <p className="text-sm font-medium">Adjusted daily prices</p>
+        <FieldDescription>
+          Coverage uses stored price bars when available; otherwise the provider fills gaps.
+        </FieldDescription>
       </div>
 
-      <button
-        type="button"
-        className="rounded-lg bg-sky px-4 py-2 text-sm font-medium text-ink disabled:opacity-50"
-        onClick={() => void loadPrices()}
-        disabled={loading}
-      >
-        {loading ? 'Loading prices…' : 'Load prices'}
-      </button>
-
-      {formError && <p className="text-sm text-danger">{formError}</p>}
-
       {rows.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-line">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-line bg-ink text-muted">
-              <tr>
-                <th className="px-3 py-2 font-medium">Symbol</th>
-                <th className="px-3 py-2 font-medium">Coverage</th>
-                <th className="px-3 py-2 font-medium">Source</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Symbol</TableHead>
+                <TableHead>Coverage</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((row) => (
-                <tr key={row.symbol} className="border-b border-line last:border-0">
-                  <td className="px-3 py-2 font-medium text-paper">{row.symbol}</td>
-                  <td className={`px-3 py-2 ${row.status === 'ok' ? 'text-muted' : 'text-danger'}`}>
+                <TableRow key={row.symbol}>
+                  <TableCell className="font-medium">{row.symbol}</TableCell>
+                  <TableCell
+                    className={
+                      row.status === 'ok' ? 'text-muted-foreground' : 'text-destructive'
+                    }
+                  >
                     {row.summary}
-                  </td>
-                  <td className="px-3 py-2 text-muted">
-                    {row.status === 'ok'
-                      ? row.servedFromDatabase
-                        ? 'Database'
-                        : 'Provider'
-                      : '—'}
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>
+                    {row.status === 'ok' ? (
+                      <Badge variant="secondary">
+                        {row.servedFromDatabase ? 'Complete — database' : 'Complete — provider'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive">Needs attention</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>
