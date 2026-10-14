@@ -9,6 +9,7 @@ export type OptimizationRequest = {
   maxWeight: number | null
   riskFreeRate: number | null
   currentWeights: number[]
+  initialCapital: number | null
 }
 
 export type EquityCurvePoint = {
@@ -37,6 +38,8 @@ export type StoredOptimizationRun = {
   result: OptimizationResult
   holdings: Holding[]
   portfolioName: string
+  referencePrices: Record<string, number>
+  initialCapital: number
 }
 
 const LAST_RUN_KEY = 'optify.lastOptimization'
@@ -55,6 +58,7 @@ export async function runOptimization(
       max_weight: request.maxWeight,
       risk_free_rate: request.riskFreeRate,
       current_weights: request.currentWeights,
+      initial_capital: request.initialCapital,
     }),
   })
 }

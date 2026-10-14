@@ -13,6 +13,7 @@ export type PriceHistoryResponse = {
   bar_count: number
   first_date: string | null
   last_date: string | null
+  last_close: number | null
   source: string
   fetched_at: string | null
   served_from_database: boolean

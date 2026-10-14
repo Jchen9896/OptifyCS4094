@@ -84,6 +84,7 @@ def test_get_or_fetch_history_fetches_and_stores(session: Session):
     assert provider.history_calls == 1
     assert result.served_from_database is False
     assert result.bar_count == 2
+    assert result.last_close == pytest.approx(2.0)
     assert result.symbol == "AAPL"
     assert result.source == "yfinance"
     stored = PriceRepository(session).list_range("AAPL", date(2026, 1, 2), date(2026, 1, 5))

@@ -32,6 +32,7 @@ SUCCESS = PriceHistoryResult(
     bar_count=2,
     first_date=date(2026, 1, 2),
     last_date=date(2026, 1, 5),
+    last_close=150.25,
     source="yfinance",
     fetched_at=datetime(2026, 10, 14, tzinfo=timezone.utc),
     served_from_database=False,
@@ -54,6 +55,7 @@ def test_history_returns_stored_summary():
     payload = response.json()
     assert payload["symbol"] == "AAPL"
     assert payload["bar_count"] == 2
+    assert payload["last_close"] == 150.25
     assert payload["served_from_database"] is False
     assert payload["source"] == "yfinance"
 

@@ -32,4 +32,5 @@ def run_optimization(
         max_weight=body.max_weight,
         risk_free_rate=body.risk_free_rate,
         current_weights=body.current_weights,
+        initial_capital=body.initial_capital,
     )

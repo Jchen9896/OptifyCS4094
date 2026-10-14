@@ -61,6 +61,7 @@ class OptimizationService:
         max_weight: float | None,
         risk_free_rate: float | None,
         current_weights: list[float] | None = None,
+        initial_capital: float | None = None,
     ) -> OptimizationResult:
         """Optimize weights for `tickers` over the stored history in the date range."""
         validate_date_range(start_date, end_date, self._max_span_days)
@@ -78,6 +79,9 @@ class OptimizationService:
         risk_free = (
             self._default_risk_free_rate if risk_free_rate is None else risk_free_rate
         )
+        capital = self._initial_capital if initial_capital is None else float(initial_capital)
+        if capital <= 0:
+            raise InvalidOptimizationInputError("Initial portfolio value must be greater than zero.")
 
         batch = self._reader.read_adjusted_history(normalized, start_date, end_date)
         sessions = self._calendar.sessions_in_range(start_date, end_date)
@@ -128,14 +132,14 @@ class OptimizationService:
             stats.tickers,
             current_list,
             [weight_map[ticker] for ticker in stats.tickers],
-            self._initial_capital,
+            capital,
         )
         assumptions = [
             *stats.assumptions,
             f"Price source: {batch.source}; interval {batch.interval}; basis {batch.adjustment_basis}.",
             f"Strategy: {strategy_name} (long-only weights sum to 100%).",
             f"Risk-free rate: {risk_free:g} (annual decimal).",
-            f"Capital chart starts at {self._initial_capital:g} with buy-and-hold weights.",
+            f"Capital chart starts at {capital:g} with buy-and-hold weights.",
             "Results are historical estimates, not guaranteed outcomes.",
         ]
         return OptimizationResult(
@@ -150,7 +154,7 @@ class OptimizationService:
             period_start=start_date,
             period_end=end_date,
             assumptions=assumptions,
-            initial_capital=self._initial_capital,
+            initial_capital=capital,
             equity_curve=[
                 EquityCurvePointSchema(
                     date=point.date,
