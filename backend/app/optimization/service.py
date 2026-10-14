@@ -101,10 +101,9 @@ class OptimizationService:
         weights = self._strategies[strategy_name].compute_weights(
             expected, covariance, max_weight, risk_free
         )
-        expected_return = float(weights @ expected)
-        variance = float(weights @ covariance @ weights)
-        volatility = float(np.sqrt(max(variance, 0.0)))
-        sharpe_ratio = (expected_return - risk_free) / volatility if volatility > 0 else 0.0
+        expected_return, volatility, sharpe_ratio = _portfolio_metrics(
+            weights, expected, covariance, risk_free
+        )
 
         weight_map = {ticker: float(weight) for ticker, weight in zip(stats.tickers, weights)}
         if current_weights is None:
@@ -121,6 +120,9 @@ class OptimizationService:
             if any(value < -self._tolerance for value in current_list):
                 raise InvalidOptimizationInputError("current_weights cannot be negative.")
 
+        current_return, current_volatility, current_sharpe = _portfolio_metrics(
+            np.asarray(current_list, dtype=float), expected, covariance, risk_free
+        )
         curve = build_equity_curve(
             batch.histories,
             stats.tickers,
@@ -142,6 +144,9 @@ class OptimizationService:
             expected_return=expected_return,
             volatility=volatility,
             sharpe_ratio=sharpe_ratio,
+            current_expected_return=current_return,
+            current_volatility=current_volatility,
+            current_sharpe_ratio=current_sharpe,
             period_start=start_date,
             period_end=end_date,
             assumptions=assumptions,
@@ -155,6 +160,19 @@ class OptimizationService:
                 for point in curve
             ],
         )
+
+
+def _portfolio_metrics(
+    weights: np.ndarray,
+    expected: np.ndarray,
+    covariance: np.ndarray,
+    risk_free: float,
+) -> tuple[float, float, float]:
+    """Return expected return, volatility, and Sharpe for a weight vector."""
+    expected_return = float(weights @ expected)
+    volatility = float(np.sqrt(max(float(weights @ covariance @ weights), 0.0)))
+    sharpe_ratio = (expected_return - risk_free) / volatility if volatility > 0 else 0.0
+    return expected_return, volatility, sharpe_ratio
 
 
 def create_optimization_service(settings: Settings, session: Session) -> OptimizationService:

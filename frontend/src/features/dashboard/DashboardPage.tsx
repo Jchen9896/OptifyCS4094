@@ -76,40 +76,68 @@ export default function DashboardPage() {
             {result.strategy}
           </p>
         </div>
-        <Button asChild variant="outline">
+        <Button asChild>
           <Link to="/setup">Edit portfolio setup</Link>
         </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          { label: 'Assets', value: String(weightRows.length), note: 'In optimized set' },
-          {
-            label: 'Expected return',
-            value: formatPercent(result.expected_return),
-            note: 'Annualized estimate',
-          },
-          {
-            label: 'Volatility',
-            value: formatPercent(result.volatility),
-            note: 'Annualized estimate',
-          },
-          {
-            label: 'Sharpe ratio',
-            value: result.sharpe_ratio.toFixed(2),
-            note: 'Using configured risk-free rate',
-          },
-        ].map((kpi) => (
-          <Card key={kpi.label} size="sm">
-            <CardHeader>
-              <CardDescription className="text-xs tracking-wide uppercase">{kpi.label}</CardDescription>
-              <CardTitle className="text-2xl">{kpi.value}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">{kpi.note}</p>
-            </CardContent>
-          </Card>
-        ))}
+        <Card size="sm">
+          <CardHeader>
+            <CardDescription className="text-xs tracking-wide uppercase">Assets</CardDescription>
+            <CardTitle className="text-2xl">{weightRows.length}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Holdings in the run</p>
+          </CardContent>
+        </Card>
+        {(
+          [
+            {
+              label: 'Expected return',
+              before: result.current_expected_return,
+              after: result.expected_return,
+              note: 'Annualized estimate',
+              asPercent: true,
+            },
+            {
+              label: 'Volatility',
+              before: result.current_volatility,
+              after: result.volatility,
+              note: 'Annualized estimate',
+              asPercent: true,
+            },
+            {
+              label: 'Sharpe ratio',
+              before: result.current_sharpe_ratio,
+              after: result.sharpe_ratio,
+              note: 'Using configured risk-free rate',
+              asPercent: false,
+            },
+          ] as const
+        ).map((kpi) => {
+          const hasBefore = typeof kpi.before === 'number'
+          const beforeText = !hasBefore
+            ? '—'
+            : kpi.asPercent
+              ? formatPercent(kpi.before)
+              : kpi.before.toFixed(2)
+          const afterText = kpi.asPercent ? formatPercent(kpi.after) : kpi.after.toFixed(2)
+          return (
+            <Card key={kpi.label} size="sm">
+              <CardHeader>
+                <CardDescription className="text-xs tracking-wide uppercase">{kpi.label}</CardDescription>
+                <CardTitle className="text-2xl">{afterText}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                <p className="text-xs text-muted-foreground">
+                  Before {beforeText} → After {afterText}
+                </p>
+                <p className="text-xs text-muted-foreground">{kpi.note}</p>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {result.equity_curve?.length ? (

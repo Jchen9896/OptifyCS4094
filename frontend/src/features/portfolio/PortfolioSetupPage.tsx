@@ -129,12 +129,8 @@ export default function PortfolioSetupPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline">
-            Create new portfolio
-          </Button>
-          <Button type="button" variant="outline">
-            Save portfolio
-          </Button>
+          <Button type="button">Create new portfolio</Button>
+          <Button type="button">Save portfolio</Button>
         </div>
       </div>
 
