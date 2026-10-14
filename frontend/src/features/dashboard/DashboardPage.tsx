@@ -21,6 +21,32 @@ import { formatPercent, formatWeight } from '@/lib/formatters.ts'
 import { loadLastOptimizationRun } from '../optimization/optimizationApi.ts'
 import PortfolioPerformanceCharts from './PortfolioPerformanceCharts.tsx'
 
+function formatMetric(value: number | undefined, asPercent: boolean): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '—'
+  }
+  return asPercent ? formatPercent(value) : value.toFixed(2)
+}
+
+function formatDelta(before: number | undefined, after: number, asPercent: boolean): string {
+  if (typeof before !== 'number' || !Number.isFinite(before) || !Number.isFinite(after)) {
+    return '—'
+  }
+  const delta = after - before
+  const sign = delta > 0 ? '+' : ''
+  if (asPercent) {
+    return `${sign}${(delta * 100).toFixed(2)} pp`
+  }
+  return `${sign}${delta.toFixed(2)}`
+}
+
+function formatShares(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) {
+    return '—'
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
+}
+
 export default function DashboardPage() {
   const run = useMemo(() => loadLastOptimizationRun(), [])
 
@@ -51,16 +77,29 @@ export default function DashboardPage() {
     )
   }
 
-  const { result, holdings, portfolioName } = run
+  const { result, holdings, portfolioName, referencePrices = {}, initialCapital } = run
+  const capital = initialCapital ?? result.initial_capital
   const names = Object.fromEntries(holdings.map((holding) => [holding.symbol, holding.name]))
-  const weightRows = Object.entries(result.weights).map(([symbol, weight]) => ({
-    symbol,
-    name: names[symbol] ?? symbol,
-    weight,
-  }))
   const currentBySymbol = Object.fromEntries(
     holdings.map((holding) => [holding.symbol, holding.weightPercent / 100]),
   )
+  const currentQtyBySymbol = Object.fromEntries(
+    holdings.map((holding) => [holding.symbol, holding.quantity ?? 0]),
+  )
+  const weightRows = Object.entries(result.weights).map(([symbol, weight]) => {
+    const price = referencePrices[symbol]
+    const optimizedQty =
+      typeof price === 'number' && price > 0 && capital > 0 ? (weight * capital) / price : null
+    const currentQty = currentQtyBySymbol[symbol]
+    return {
+      symbol,
+      name: names[symbol] ?? symbol,
+      weight,
+      currentWeight: currentBySymbol[symbol] ?? 0,
+      currentQty: typeof currentQty === 'number' ? currentQty : null,
+      optimizedQty,
+    }
+  })
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -115,29 +154,32 @@ export default function DashboardPage() {
               asPercent: false,
             },
           ] as const
-        ).map((kpi) => {
-          const hasBefore = typeof kpi.before === 'number'
-          const beforeText = !hasBefore
-            ? '—'
-            : kpi.asPercent
-              ? formatPercent(kpi.before)
-              : kpi.before.toFixed(2)
-          const afterText = kpi.asPercent ? formatPercent(kpi.after) : kpi.after.toFixed(2)
-          return (
-            <Card key={kpi.label} size="sm">
-              <CardHeader>
-                <CardDescription className="text-xs tracking-wide uppercase">{kpi.label}</CardDescription>
-                <CardTitle className="text-2xl">{afterText}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1">
-                <p className="text-xs text-muted-foreground">
-                  Before {beforeText} → After {afterText}
-                </p>
-                <p className="text-xs text-muted-foreground">{kpi.note}</p>
-              </CardContent>
-            </Card>
-          )
-        })}
+        ).map((kpi) => (
+          <Card key={kpi.label} size="sm">
+            <CardHeader>
+              <CardDescription className="text-xs tracking-wide uppercase">{kpi.label}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Current</p>
+                  <p className="text-xl font-semibold tabular-nums">
+                    {formatMetric(kpi.before, kpi.asPercent)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Optimized</p>
+                  <p className="text-xl font-semibold tabular-nums">
+                    {formatMetric(kpi.after, kpi.asPercent)}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Delta {formatDelta(kpi.before, kpi.after, kpi.asPercent)} · {kpi.note}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {result.equity_curve?.length ? (
@@ -146,7 +188,7 @@ export default function DashboardPage() {
           initialCapital={result.initial_capital}
           weightRows={weightRows.map((row) => ({
             symbol: row.symbol,
-            current: currentBySymbol[row.symbol] ?? 0,
+            current: row.currentWeight,
             optimized: row.weight,
           }))}
         />
@@ -166,8 +208,8 @@ export default function DashboardPage() {
           <CardHeader>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <CardTitle>Optimized weights</CardTitle>
-                <CardDescription>Long-only allocation from the last run</CardDescription>
+                <CardTitle>Optimized allocation</CardTitle>
+                <CardDescription>Weights and share counts from the last run</CardDescription>
               </div>
               <Badge variant="secondary">Live</Badge>
             </div>
@@ -178,8 +220,10 @@ export default function DashboardPage() {
                 <TableRow>
                   <TableHead>Symbol</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Current</TableHead>
-                  <TableHead>Optimized</TableHead>
+                  <TableHead>Current wt</TableHead>
+                  <TableHead>Opt. wt</TableHead>
+                  <TableHead>Current qty</TableHead>
+                  <TableHead>Opt. qty</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -187,8 +231,10 @@ export default function DashboardPage() {
                   <TableRow key={row.symbol}>
                     <TableCell className="font-medium">{row.symbol}</TableCell>
                     <TableCell className="text-muted-foreground">{row.name}</TableCell>
-                    <TableCell>{formatWeight(currentBySymbol[row.symbol] ?? 0)}</TableCell>
+                    <TableCell>{formatWeight(row.currentWeight)}</TableCell>
                     <TableCell>{formatWeight(row.weight)}</TableCell>
+                    <TableCell>{formatShares(row.currentQty)}</TableCell>
+                    <TableCell>{formatShares(row.optimizedQty)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

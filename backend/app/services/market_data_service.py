@@ -24,6 +24,7 @@ class PriceHistoryResult:
     bar_count: int
     first_date: date | None
     last_date: date | None
+    last_close: float | None
     source: str
     fetched_at: datetime | None
     served_from_database: bool
@@ -102,6 +103,7 @@ class MarketDataService:
             bar_count=len(rows),
             first_date=rows[0].date if rows else None,
             last_date=rows[-1].date if rows else None,
+            last_close=float(rows[-1].close) if rows else None,
             source=rows[0].source if rows else self._source,
             fetched_at=rows[0].fetched_at if rows else None,
             served_from_database=served_from_database,

@@ -24,6 +24,7 @@ class PriceHistoryResponse(BaseModel):
     bar_count: int
     first_date: date | None
     last_date: date | None
+    last_close: float | None
     source: str
     fetched_at: datetime | None
     served_from_database: bool

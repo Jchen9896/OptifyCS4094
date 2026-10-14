@@ -75,6 +75,33 @@ def test_run_returns_weights_and_metrics():
     assert any("historical estimates" in item.lower() for item in result.assumptions)
 
 
+def test_run_uses_request_initial_capital():
+    days = [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4)]
+    batch = PriceHistoryBatch(
+        histories={
+            "AAA": [_bar(day, close) for day, close in zip(days, [100, 110, 99, 108])],
+            "BBB": [_bar(day, close) for day, close in zip(days, [100, 90, 99, 95])],
+        },
+        source="yfinance",
+        interval="1d",
+        adjustment_basis="split_dividend_adjusted",
+        calendar="XNYS",
+    )
+    result = _service(FakeReader(batch)).run(
+        ["AAA", "BBB"],
+        date(2026, 9, 1),
+        date(2026, 9, 4),
+        strategy="minvar",
+        max_weight=None,
+        risk_free_rate=0.04,
+        current_weights=[0.5, 0.5],
+        initial_capital=50_000.0,
+    )
+
+    assert result.initial_capital == 50_000.0
+    assert result.equity_curve[0].current_value == pytest.approx(50_000.0)
+
+
 def test_run_requires_two_tickers():
     with pytest.raises(InvalidOptimizationInputError):
         _service(FakeReader()).run(

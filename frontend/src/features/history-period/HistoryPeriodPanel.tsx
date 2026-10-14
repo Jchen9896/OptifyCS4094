@@ -22,6 +22,7 @@ type HistoryPeriodPanelProps = {
   endDate: string
   onStartDateChange: (value: string) => void
   onEndDateChange: (value: string) => void
+  onPricesLoaded: (prices: Record<string, number>) => void
 }
 
 type CoverageRow = {
@@ -37,6 +38,7 @@ export default function HistoryPeriodPanel({
   endDate,
   onStartDateChange,
   onEndDateChange,
+  onPricesLoaded,
 }: HistoryPeriodPanelProps) {
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -46,12 +48,14 @@ export default function HistoryPeriodPanel({
     if (holdings.length === 0) {
       setFormError('Add at least one asset before loading prices.')
       setRows([])
+      onPricesLoaded({})
       return
     }
 
     setLoading(true)
     setFormError(null)
     const nextRows: CoverageRow[] = []
+    const nextPrices: Record<string, number> = {}
 
     for (const holding of holdings) {
       try {
@@ -64,12 +68,17 @@ export default function HistoryPeriodPanel({
           result.first_date && result.last_date
             ? `${result.first_date} → ${result.last_date}`
             : 'No dates returned'
+        const closeNote =
+          result.last_close != null ? ` · last close ${result.last_close.toFixed(2)}` : ''
         nextRows.push({
           symbol: holding.symbol,
           status: 'ok',
-          summary: `${result.bar_count} bars · ${span}`,
+          summary: `${result.bar_count} bars · ${span}${closeNote}`,
           servedFromDatabase: result.served_from_database,
         })
+        if (result.last_close != null && result.last_close > 0) {
+          nextPrices[holding.symbol] = result.last_close
+        }
       } catch (caught) {
         nextRows.push({
           symbol: holding.symbol,
@@ -80,6 +89,7 @@ export default function HistoryPeriodPanel({
     }
 
     setRows(nextRows)
+    onPricesLoaded(nextPrices)
     setLoading(false)
   }
 

@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
@@ -32,6 +31,7 @@ import HoldingsTable from './components/HoldingsTable.tsx'
 import {
   addHolding,
   removeHolding,
+  resyncQuantities,
   sumWeights,
   updateHoldingWeight,
   weightsAreComplete,
@@ -52,15 +52,12 @@ function defaultStartDate(): string {
 export default function PortfolioSetupPage() {
   const navigate = useNavigate()
   const [portfolioName, setPortfolioName] = useState('Sample portfolio')
-  const [notionalValue, setNotionalValue] = useState('248500')
+  const [initialPortfolioValue, setInitialPortfolioValue] = useState('100000')
   const [strategy, setStrategy] = useState('minvar')
-  const [objective, setObjective] = useState('variance')
   const [maxWeight, setMaxWeight] = useState('45')
-  const [keepAsset, setKeepAsset] = useState(true)
-  const [mustKeep, setMustKeep] = useState('AGG')
-  const [minWeight, setMinWeight] = useState('5')
   const [riskFree, setRiskFree] = useState('4')
   const [holdings, setHoldings] = useState<Holding[]>([])
+  const [referencePrices, setReferencePrices] = useState<Record<string, number>>({})
   const [startDate, setStartDate] = useState(defaultStartDate)
   const [endDate, setEndDate] = useState(defaultEndDate)
   const [running, setRunning] = useState(false)
@@ -70,7 +67,10 @@ export default function PortfolioSetupPage() {
     () => new Set(holdings.map((holding) => holding.symbol)),
     [holdings],
   )
-  const readyForAnalysis = holdings.length >= 2 && weightsAreComplete(holdings)
+  const parsedInitialValue = Number(initialPortfolioValue)
+  const initialValue =
+    Number.isFinite(parsedInitialValue) && parsedInitialValue > 0 ? parsedInitialValue : 0
+  const readyForAnalysis = holdings.length >= 2 && weightsAreComplete(holdings) && initialValue > 0
 
   function handleAdd(stock: StockSearchResult) {
     setHoldings((current) =>
@@ -80,6 +80,22 @@ export default function PortfolioSetupPage() {
         quoteType: stock.quote_type,
       }),
     )
+  }
+
+  function handleInitialValueChange(value: string) {
+    setInitialPortfolioValue(value)
+    const next = Number(value)
+    if (!(Number.isFinite(next) && next > 0)) {
+      return
+    }
+    setHoldings((current) => resyncQuantities(current, next, referencePrices))
+  }
+
+  function handlePricesLoaded(prices: Record<string, number>) {
+    setReferencePrices(prices)
+    if (initialValue > 0) {
+      setHoldings((current) => resyncQuantities(current, initialValue, prices))
+    }
   }
 
   async function handleRunAnalysis() {
@@ -102,8 +118,15 @@ export default function PortfolioSetupPage() {
             : null,
         riskFreeRate: Number.isFinite(riskFreePercent) ? riskFreePercent / 100 : null,
         currentWeights: holdings.map((holding) => holding.weightPercent / 100),
+        initialCapital: initialValue,
       })
-      saveLastOptimizationRun({ result, holdings, portfolioName })
+      saveLastOptimizationRun({
+        result,
+        holdings,
+        portfolioName,
+        referencePrices,
+        initialCapital: initialValue,
+      })
       navigate('/')
     } catch (caught) {
       setRunError(
@@ -151,14 +174,15 @@ export default function PortfolioSetupPage() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="notional">Notional portfolio value (USD)</FieldLabel>
+                  <FieldLabel htmlFor="initial-value">Initial portfolio value (USD)</FieldLabel>
                   <Input
-                    id="notional"
-                    value={notionalValue}
-                    onChange={(event) => setNotionalValue(event.target.value)}
+                    id="initial-value"
+                    value={initialPortfolioValue}
+                    onChange={(event) => handleInitialValueChange(event.target.value)}
                   />
                   <FieldDescription>
-                    For context only. No brokerage funds are connected.
+                    Scales equity charts and estimated share counts. No brokerage funds are
+                    connected.
                   </FieldDescription>
                 </Field>
               </FieldGroup>
@@ -169,15 +193,25 @@ export default function PortfolioSetupPage() {
             <CardHeader>
               <CardTitle>2. Select assets and set weights</CardTitle>
               <CardDescription>
-                Search by ticker or company name, then set weights that total 100%.
+                Search by ticker or company name, then set weights that total 100%. Quantities are
+                estimated from weight, initial portfolio value, and the last loaded adjusted close.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <StockSearch onAdd={handleAdd} disabledSymbols={disabledSymbols} />
               <HoldingsTable
                 holdings={holdings}
+                prices={referencePrices}
                 onWeightChange={(symbol, weightPercent) =>
-                  setHoldings((current) => updateHoldingWeight(current, symbol, weightPercent))
+                  setHoldings((current) =>
+                    updateHoldingWeight(
+                      current,
+                      symbol,
+                      weightPercent,
+                      initialValue,
+                      referencePrices,
+                    ),
+                  )
                 }
                 onRemove={(symbol) => setHoldings((current) => removeHolding(current, symbol))}
               />
@@ -198,6 +232,7 @@ export default function PortfolioSetupPage() {
                 endDate={endDate}
                 onStartDateChange={setStartDate}
                 onEndDateChange={setEndDate}
+                onPricesLoaded={handlePricesLoaded}
               />
             </CardContent>
           </Card>
@@ -222,18 +257,6 @@ export default function PortfolioSetupPage() {
                 </Select>
               </Field>
               <Field>
-                <FieldLabel>Objective</FieldLabel>
-                <Select value={objective} onValueChange={setObjective}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sharpe">Maximize Sharpe ratio</SelectItem>
-                    <SelectItem value="variance">Minimize variance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
                 <FieldLabel htmlFor="max-weight">Maximum weight per asset</FieldLabel>
                 <Input
                   id="max-weight"
@@ -241,44 +264,6 @@ export default function PortfolioSetupPage() {
                   onChange={(event) => setMaxWeight(event.target.value)}
                 />
               </Field>
-              <Field orientation="horizontal">
-                <Checkbox
-                  id="keep-asset"
-                  checked={keepAsset}
-                  onCheckedChange={(checked) => setKeepAsset(checked === true)}
-                />
-                <FieldLabel htmlFor="keep-asset" className="font-normal">
-                  Keep an asset in the optimized portfolio
-                </FieldLabel>
-              </Field>
-              {keepAsset && (
-                <>
-                  <Field>
-                    <FieldLabel>Must-keep asset</FieldLabel>
-                    <Select value={mustKeep} onValueChange={setMustKeep}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="AGG">AGG</SelectItem>
-                        {holdings.map((holding) => (
-                          <SelectItem key={holding.symbol} value={holding.symbol}>
-                            {holding.symbol}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="min-weight">Minimum weight</FieldLabel>
-                    <Input
-                      id="min-weight"
-                      value={minWeight}
-                      onChange={(event) => setMinWeight(event.target.value)}
-                    />
-                  </Field>
-                </>
-              )}
               <Field>
                 <FieldLabel htmlFor="risk-free">Assumed annual risk-free rate</FieldLabel>
                 <Input
@@ -318,7 +303,7 @@ export default function PortfolioSetupPage() {
             title={
               readyForAnalysis
                 ? 'Run minimum-variance optimization on stored prices.'
-                : 'Add at least two assets and set weights to 100% first.'
+                : 'Add at least two assets, set weights to 100%, and enter a positive initial value.'
             }
             onClick={() => void handleRunAnalysis()}
           >

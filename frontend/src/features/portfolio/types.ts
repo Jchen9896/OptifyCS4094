@@ -4,6 +4,8 @@ export type Holding = {
   name: string
   quoteType: string | null
   weightPercent: number
+  /** Derived from weight × initial portfolio value / last close when prices are loaded. */
+  quantity: number
 }
 
 export const TARGET_WEIGHT_TOTAL = 100
