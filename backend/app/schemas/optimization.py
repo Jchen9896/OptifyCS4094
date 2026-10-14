@@ -5,6 +5,17 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 
+class OptimizationRequest(BaseModel):
+    """HTTP body for one optimization run from stored history."""
+
+    tickers: list[str] = Field(min_length=2)
+    start_date: date
+    end_date: date
+    strategy: str = "min_variance"
+    max_weight: float | None = Field(default=None, gt=0, le=1)
+    risk_free_rate: float | None = None
+
+
 class OptimizerInput(BaseModel):
     """Inputs for one optimization run.
 
