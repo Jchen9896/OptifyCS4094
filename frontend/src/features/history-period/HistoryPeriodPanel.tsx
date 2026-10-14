@@ -18,6 +18,10 @@ import { fetchPriceHistory, type PriceHistoryResponse } from './historyApi.ts'
 
 type HistoryPeriodPanelProps = {
   holdings: Holding[]
+  startDate: string
+  endDate: string
+  onStartDateChange: (value: string) => void
+  onEndDateChange: (value: string) => void
 }
 
 type CoverageRow = {
@@ -27,20 +31,13 @@ type CoverageRow = {
   servedFromDatabase?: boolean
 }
 
-function defaultEndDate(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function defaultStartDate(): string {
-  const end = new Date()
-  const start = new Date(end)
-  start.setFullYear(end.getFullYear() - 1)
-  return start.toISOString().slice(0, 10)
-}
-
-export default function HistoryPeriodPanel({ holdings }: HistoryPeriodPanelProps) {
-  const [startDate, setStartDate] = useState(defaultStartDate)
-  const [endDate, setEndDate] = useState(defaultEndDate)
+export default function HistoryPeriodPanel({
+  holdings,
+  startDate,
+  endDate,
+  onStartDateChange,
+  onEndDateChange,
+}: HistoryPeriodPanelProps) {
   const [loading, setLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [rows, setRows] = useState<CoverageRow[]>([])
@@ -95,7 +92,7 @@ export default function HistoryPeriodPanel({ holdings }: HistoryPeriodPanelProps
             id="start-date"
             type="date"
             value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
+            onChange={(event) => onStartDateChange(event.target.value)}
           />
         </Field>
         <Field>
@@ -104,7 +101,7 @@ export default function HistoryPeriodPanel({ holdings }: HistoryPeriodPanelProps
             id="end-date"
             type="date"
             value={endDate}
-            onChange={(event) => setEndDate(event.target.value)}
+            onChange={(event) => onEndDateChange(event.target.value)}
           />
         </Field>
       </FieldGroup>
