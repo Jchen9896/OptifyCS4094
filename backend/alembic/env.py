@@ -6,6 +6,10 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import get_settings
 from app.core.db import Base
 
+# Import models so Base.metadata includes their tables for autogenerate and upgrades.
+from app.models import price_history as _price_history  # noqa: F401
+from app.models import stock as _stock  # noqa: F401
+
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
