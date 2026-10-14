@@ -6,7 +6,10 @@ from pydantic import BaseModel, Field
 
 
 class OptimizerInput(BaseModel):
-    """Inputs for one optimization run."""
+    """Inputs for one optimization run.
+
+    `expected_returns`, `covariance` and `risk_free_rate` are yearly (annualized) values.
+    """
 
     tickers: list[str] = Field(min_length=2)
     expected_returns: list[float]

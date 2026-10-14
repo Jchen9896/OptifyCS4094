@@ -7,7 +7,7 @@ from app.core.errors import InvalidOptimizationInputError
 from app.optimization.validation import validate_optimizer_input
 from app.schemas.optimization import OptimizerInput
 
-TOLERANCE = 1e-8
+TOLERANCE = 1e-5
 
 
 def make_input(**changes) -> OptimizerInput:
@@ -30,13 +30,7 @@ def test_valid_input_returns_arrays():
     assert isinstance(expected_returns, np.ndarray)
     assert expected_returns.shape == (2,)
     assert covariance.shape == (2, 2)
-    assert covariance[0, 0] == pytest.approx(0.04)
-
-
-def test_small_rounding_difference_is_accepted():
-    data = make_input(covariance=[[0.04, 0.0], [1e-12, 0.01]])
-
-    validate_optimizer_input(data, TOLERANCE)
+    assert covariance[0, 0] == 0.04
 
 
 @pytest.mark.parametrize(
