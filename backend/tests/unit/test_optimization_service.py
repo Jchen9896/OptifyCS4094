@@ -28,7 +28,27 @@ def _bar(day: date, close: float) -> PriceBar:
     return PriceBar(date=day, open=close, high=close, low=close, close=close, volume=0)
 
 
-def _service(reader: FakeReader) -> OptimizationService:
+def _two_stock_batch() -> PriceHistoryBatch:
+    """Four days of prices for two stocks, so three daily returns."""
+    days = [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4)]
+    return PriceHistoryBatch(
+        histories={
+            "AAA": [_bar(day, close) for day, close in zip(days, [100, 110, 99, 108])],
+            "BBB": [_bar(day, close) for day, close in zip(days, [100, 90, 99, 95])],
+        },
+        source="yfinance",
+        interval="1d",
+        adjustment_basis="split_dividend_adjusted",
+        calendar="XNYS",
+    )
+
+
+# The low default minimums let the test batches with three returns run.
+def _service(
+    reader: FakeReader,
+    min_observations: int = 3,
+    min_observations_per_stock: int = 1,
+) -> OptimizationService:
     return OptimizationService(
         reader=reader,  # type: ignore[arg-type]
         calendar=WeekdaySessionCalendar(),
@@ -38,6 +58,8 @@ def _service(reader: FakeReader) -> OptimizationService:
         default_risk_free_rate=0.04,
         max_span_days=3650,
         initial_capital=100_000.0,
+        min_observations=min_observations,
+        min_observations_per_stock=min_observations_per_stock,
     )
 
 
@@ -162,6 +184,26 @@ def test_run_rejects_an_unknown_strategy_and_lists_the_names():
             date(2026, 9, 1),
             date(2026, 9, 4),
             strategy="mvo",
+            max_weight=None,
+            risk_free_rate=None,
+        )
+
+
+@pytest.mark.parametrize(
+    ("min_observations", "min_observations_per_stock", "required"),
+    [(5, 1, 5), (2, 3, 6)],
+    ids=["the minimum decides", "the minimum per stock decides"],
+)
+def test_run_rejects_too_few_returns(min_observations, min_observations_per_stock, required):
+    # The batch has three returns for two stocks.
+    service = _service(FakeReader(_two_stock_batch()), min_observations, min_observations_per_stock)
+
+    with pytest.raises(InsufficientHistoryError, match=f"only 3 trading days .* at least {required}:"):
+        service.run(
+            ["AAA", "BBB"],
+            date(2026, 9, 1),
+            date(2026, 9, 4),
+            strategy="min_variance",
             max_weight=None,
             risk_free_rate=None,
         )

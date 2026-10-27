@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     annualization_factor: float = 252.0
     optimization_tolerance: float = 1e-5
     default_risk_free_rate: float = 0.04
+    # An optimization needs at least the larger of these numbers of shared daily returns:
+    # the minimum, or the minimum per stock x the number of stocks (Decision 005, "Minimum history").
+    min_return_observations: int = 60
+    min_return_observations_per_stock: int = 10
     portfolio_chart_initial_capital: float = 100_000.0
     # Yahoo symbols use letters, digits, and ".", "-", "^", "=" (for example BRK-B, RY.TO).
     ticker_pattern: str = r"[A-Z0-9.\-^=]{1,15}"

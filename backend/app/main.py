@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -28,6 +29,16 @@ def create_app() -> FastAPI:
             status_code=exc.status_code,
             content={"detail": {"code": exc.code, "message": exc.message}},
         )
+
+    # The default handler copies the bad input into the response. A NaN input cannot be
+    # written as JSON, so the response failed with 500. This handler sends only the first
+    # problem, in the same format as AppError, so the frontend can show the message.
+    @application.exception_handler(RequestValidationError)
+    async def handle_request_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        problem = exc.errors()[0]
+        field = ".".join(part for part in problem["loc"][1:] if isinstance(part, str))
+        message = f"{field}: {problem['msg']}." if field else f"{problem['msg']}."
+        return await handle_app_error(request, AppError(message, code="invalid_request", status_code=422))
 
     application.include_router(api_router, prefix="/api")
     return application

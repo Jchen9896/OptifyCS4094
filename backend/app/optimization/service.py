@@ -6,7 +6,7 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import InvalidOptimizationInputError
+from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.optimization.base import OptimizationStrategy
 from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
 from app.optimization.validation import validate_optimizer_input
@@ -33,6 +33,8 @@ class OptimizationService:
         default_risk_free_rate: float,
         max_span_days: int,
         initial_capital: float,
+        min_observations: int,
+        min_observations_per_stock: int,
     ) -> None:
         self._reader = reader
         self._calendar = calendar
@@ -43,6 +45,8 @@ class OptimizationService:
         self._default_risk_free_rate = default_risk_free_rate
         self._max_span_days = max_span_days
         self._initial_capital = initial_capital
+        self._min_observations = min_observations
+        self._min_observations_per_stock = min_observations_per_stock
 
     def run(
         self,
@@ -84,6 +88,15 @@ class OptimizationService:
             sessions,
             self._annualization_factor,
         )
+        # Too few returns give an unreliable covariance matrix (Decision 005, "Minimum history").
+        stock_count = len(stats.tickers)
+        required = max(self._min_observations, self._min_observations_per_stock * stock_count)
+        if stats.observation_count < required:
+            raise InsufficientHistoryError(
+                f"These {stock_count} stocks share only {stats.observation_count} trading days of returns "
+                f"in this period. The optimizer needs at least {required}: {self._min_observations_per_stock} "
+                f"per stock, and at least {self._min_observations} in total. Choose a longer period."
+            )
         optimizer_input = OptimizerInput(
             tickers=stats.tickers,
             expected_returns=stats.annualized_mean_returns,
@@ -188,4 +201,6 @@ def create_optimization_service(settings: Settings, session: Session) -> Optimiz
         default_risk_free_rate=settings.default_risk_free_rate,
         max_span_days=settings.market_data_max_span_days,
         initial_capital=settings.portfolio_chart_initial_capital,
+        min_observations=settings.min_return_observations,
+        min_observations_per_stock=settings.min_return_observations_per_stock,
     )
