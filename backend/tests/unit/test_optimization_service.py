@@ -6,7 +6,7 @@ import pytest
 
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.market_data.base import PriceBar
-from app.optimization.mean_variance import MinimumVarianceStrategy
+from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
 from app.optimization.service import OptimizationService
 from app.services.price_history_reader import PriceHistoryBatch
 from app.services.session_calendar import WeekdaySessionCalendar
@@ -32,7 +32,7 @@ def _service(reader: FakeReader) -> OptimizationService:
     return OptimizationService(
         reader=reader,  # type: ignore[arg-type]
         calendar=WeekdaySessionCalendar(),
-        strategies={"min_variance": MinimumVarianceStrategy(1e-5)},
+        strategies=[MinimumVarianceStrategy(1e-5), MaxSharpeStrategy(1e-5)],
         annualization_factor=252.0,
         tolerance=1e-5,
         default_risk_free_rate=0.04,
@@ -57,7 +57,7 @@ def test_run_returns_weights_and_metrics():
         ["AAA", "BBB"],
         date(2026, 9, 1),
         date(2026, 9, 4),
-        strategy="minvar",
+        strategy="min_variance",
         max_weight=None,
         risk_free_rate=0.04,
         current_weights=[0.5, 0.5],
@@ -91,7 +91,7 @@ def test_run_uses_request_initial_capital():
         ["AAA", "BBB"],
         date(2026, 9, 1),
         date(2026, 9, 4),
-        strategy="minvar",
+        strategy="min_variance",
         max_weight=None,
         risk_free_rate=0.04,
         current_weights=[0.5, 0.5],
@@ -122,6 +122,46 @@ def test_run_surfaces_missing_stored_history():
             date(2026, 9, 1),
             date(2026, 9, 4),
             strategy="min_variance",
+            max_weight=None,
+            risk_free_rate=None,
+        )
+
+
+def test_run_max_sharpe_is_not_worse_than_the_current_allocation():
+    days = [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4)]
+    batch = PriceHistoryBatch(
+        histories={
+            "AAA": [_bar(day, close) for day, close in zip(days, [100, 110, 99, 108])],
+            "BBB": [_bar(day, close) for day, close in zip(days, [100, 90, 99, 95])],
+        },
+        source="yfinance",
+        interval="1d",
+        adjustment_basis="split_dividend_adjusted",
+        calendar="XNYS",
+    )
+    result = _service(FakeReader(batch)).run(
+        ["AAA", "BBB"],
+        date(2026, 9, 1),
+        date(2026, 9, 4),
+        strategy="max_sharpe",
+        max_weight=None,
+        risk_free_rate=0.04,
+        current_weights=[0.5, 0.5],
+    )
+
+    assert result.strategy == "max_sharpe"
+    assert abs(sum(result.weights.values()) - 1.0) < 1e-5
+    # The current allocation follows the rules, so max Sharpe must be at least as good.
+    assert result.sharpe_ratio >= result.current_sharpe_ratio - 1e-5
+
+
+def test_run_rejects_an_unknown_strategy_and_lists_the_names():
+    with pytest.raises(InvalidOptimizationInputError, match="min_variance, max_sharpe"):
+        _service(FakeReader()).run(
+            ["AAA", "BBB"],
+            date(2026, 9, 1),
+            date(2026, 9, 4),
+            strategy="mvo",
             max_weight=None,
             risk_free_rate=None,
         )

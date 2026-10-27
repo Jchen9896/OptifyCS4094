@@ -53,7 +53,7 @@ export default function PortfolioSetupPage() {
   const navigate = useNavigate()
   const [portfolioName, setPortfolioName] = useState('Sample portfolio')
   const [initialPortfolioValue, setInitialPortfolioValue] = useState('100000')
-  const [strategy, setStrategy] = useState('minvar')
+  const [strategy, setStrategy] = useState('min_variance')
   const [maxWeight, setMaxWeight] = useState('45')
   const [riskFree, setRiskFree] = useState('4')
   const [holdings, setHoldings] = useState<Holding[]>([])
@@ -251,8 +251,8 @@ export default function PortfolioSetupPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="minvar">Minimum variance</SelectItem>
-                    <SelectItem value="mvo">Mean-Variance (uses min variance in MVP)</SelectItem>
+                    <SelectItem value="min_variance">Minimum variance (lowest risk)</SelectItem>
+                    <SelectItem value="max_sharpe">Maximum Sharpe ratio (best return for its risk)</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
@@ -302,7 +302,7 @@ export default function PortfolioSetupPage() {
             disabled={!readyForAnalysis || running}
             title={
               readyForAnalysis
-                ? 'Run minimum-variance optimization on stored prices.'
+                ? 'Run the selected optimization on stored prices.'
                 : 'Add at least two assets, set weights to 100%, and enter a positive initial value.'
             }
             onClick={() => void handleRunAnalysis()}
