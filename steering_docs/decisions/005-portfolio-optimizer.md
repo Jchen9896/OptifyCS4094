@@ -71,3 +71,5 @@ Known limit: the OSQP stop rule permits errors of up to about 2e-5. Thus, in rar
 3. In `compute_weights`, call `check_rules_feasible`. Give the solver one size rule plus `weight_constraints`, and use `psd_wrap`. Then call `_solve` and `_clean_and_check`.
 4. Return the weights in ticker order.
 5. Add the class to `STRATEGIES` in `test_mean_variance.py`. Then the shared tests also run for the new strategy.
+6. Add an instance to the list in `create_optimization_service` (`service.py`). The service finds each strategy by its `name`, so the request must send this exact name.
+7. Add an option with the same `name` to the strategy menu in `PortfolioSetupPage.tsx`.

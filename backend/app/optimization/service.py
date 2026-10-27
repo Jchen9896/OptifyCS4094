@@ -6,9 +6,9 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import InvalidCalculationInputError, InvalidOptimizationInputError
+from app.core.errors import InvalidOptimizationInputError
 from app.optimization.base import OptimizationStrategy
-from app.optimization.mean_variance import MinimumVarianceStrategy
+from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
 from app.optimization.validation import validate_optimizer_input
 from app.repositories.price_repository import PriceRepository
 from app.schemas.optimization import EquityCurvePointSchema, OptimizationResult, OptimizerInput
@@ -19,14 +19,6 @@ from app.services.price_history_reader import StoredPriceHistoryReader
 from app.services.session_calendar import SessionCalendar, WeekdaySessionCalendar
 
 
-STRATEGY_ALIASES = {
-    "min_variance": "min_variance",
-    "minvar": "min_variance",
-    # Demo MVP: mean-variance UI selection runs minimum variance until Sharpe MVO lands.
-    "mvo": "min_variance",
-}
-
-
 class OptimizationService:
     """Read stored prices, calculate statistics, and return allocation weights."""
 
@@ -34,7 +26,7 @@ class OptimizationService:
         self,
         reader: StoredPriceHistoryReader,
         calendar: SessionCalendar,
-        strategies: dict[str, OptimizationStrategy],
+        strategies: list[OptimizationStrategy],
         *,
         annualization_factor: float,
         tolerance: float,
@@ -44,7 +36,8 @@ class OptimizationService:
     ) -> None:
         self._reader = reader
         self._calendar = calendar
-        self._strategies = strategies
+        # A request selects a strategy by its `name`, for example "min_variance" or "max_sharpe".
+        self._strategies = {item.name: item for item in strategies}
         self._annualization_factor = annualization_factor
         self._tolerance = tolerance
         self._default_risk_free_rate = default_risk_free_rate
@@ -71,10 +64,10 @@ class OptimizationService:
         if len(normalized) != len(set(normalized)):
             raise InvalidOptimizationInputError("Each ticker may appear only once.")
 
-        strategy_name = STRATEGY_ALIASES.get(strategy.strip().lower())
-        if strategy_name is None or strategy_name not in self._strategies:
-            raise InvalidCalculationInputError(
-                f"Strategy '{strategy}' is not supported. Use min_variance."
+        selected = self._strategies.get(strategy)
+        if selected is None:
+            raise InvalidOptimizationInputError(
+                f"Strategy '{strategy}' is not supported. Use one of: {', '.join(self._strategies)}."
             )
         risk_free = (
             self._default_risk_free_rate if risk_free_rate is None else risk_free_rate
@@ -95,16 +88,14 @@ class OptimizationService:
             tickers=stats.tickers,
             expected_returns=stats.annualized_mean_returns,
             covariance=stats.annualized_covariance,
-            strategy=strategy_name,
+            strategy=selected.name,
             max_weight=max_weight,
             risk_free_rate=risk_free,
             period_start=start_date,
             period_end=end_date,
         )
         expected, covariance = validate_optimizer_input(optimizer_input, self._tolerance)
-        weights = self._strategies[strategy_name].compute_weights(
-            expected, covariance, max_weight, risk_free
-        )
+        weights = selected.compute_weights(expected, covariance, max_weight, risk_free)
         expected_return, volatility, sharpe_ratio = _portfolio_metrics(
             weights, expected, covariance, risk_free
         )
@@ -137,13 +128,13 @@ class OptimizationService:
         assumptions = [
             *stats.assumptions,
             f"Price source: {batch.source}; interval {batch.interval}; basis {batch.adjustment_basis}.",
-            f"Strategy: {strategy_name} (long-only weights sum to 100%).",
+            f"Strategy: {selected.name} (long-only weights sum to 100%).",
             f"Risk-free rate: {risk_free:g} (annual decimal).",
             f"Capital chart starts at {capital:g} with buy-and-hold weights.",
             "Results are historical estimates, not guaranteed outcomes.",
         ]
         return OptimizationResult(
-            strategy=strategy_name,
+            strategy=selected.name,
             weights=weight_map,
             expected_return=expected_return,
             volatility=volatility,
@@ -191,7 +182,7 @@ def create_optimization_service(settings: Settings, session: Session) -> Optimiz
     return OptimizationService(
         reader=reader,
         calendar=WeekdaySessionCalendar(),
-        strategies={"min_variance": MinimumVarianceStrategy(tolerance)},
+        strategies=[MinimumVarianceStrategy(tolerance), MaxSharpeStrategy(tolerance)],
         annualization_factor=settings.annualization_factor,
         tolerance=tolerance,
         default_risk_free_rate=settings.default_risk_free_rate,
