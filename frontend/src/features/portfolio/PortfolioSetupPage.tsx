@@ -302,7 +302,7 @@ export default function PortfolioSetupPage() {
             disabled={!readyForAnalysis || running}
             title={
               readyForAnalysis
-                ? 'Run minimum-variance optimization on stored prices.'
+                ? 'Run the selected optimization on stored prices.'
                 : 'Add at least two assets, set weights to 100%, and enter a positive initial value.'
             }
             onClick={() => void handleRunAnalysis()}
