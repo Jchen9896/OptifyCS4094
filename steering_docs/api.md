@@ -81,3 +81,42 @@ Returns daily prices for one symbol and date range (Decision 006). Prefers store
 **422** `invalid_ticker_format` / `unsupported_security` from ticker validation (Decision 003).
 
 **503** `market_data_unavailable` if the market data provider fails.
+
+## `PATCH /api/portfolios/{portfolio_id}?user_id=<uuid>`
+
+Renames one portfolio. The portfolio must belong to `user_id` (Decision 009). Create and read routes are not part of this API.
+
+**Request**
+
+```json
+{
+  "name": "Growth"
+}
+```
+
+The service removes spaces at the start and end of `name`. A name that is empty after that is rejected.
+
+**200**
+
+```json
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "user_id": "22222222-2222-2222-2222-222222222222",
+  "name": "Growth",
+  "created_at": "2026-10-28T12:00:00Z"
+}
+```
+
+**404** `portfolio_not_found` if the portfolio does not exist or another user owns it.
+
+**422** `invalid_portfolio_name` if the name is blank.
+
+**409** `duplicate_portfolio_name` if this user already has a portfolio with that name.
+
+## `DELETE /api/portfolios/{portfolio_id}?user_id=<uuid>`
+
+Deletes one portfolio and its holdings. The portfolio must belong to `user_id`.
+
+**204** with an empty body when the delete succeeds.
+
+**404** `portfolio_not_found` if the portfolio does not exist or another user owns it.

@@ -129,3 +129,36 @@ class InvalidCalculationResultError(AppError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, code="invalid_calculation_result", status_code=422)
+
+
+class PortfolioNotFoundError(AppError):
+    """No portfolio exists for this id and owner."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The portfolio was not found.",
+            code="portfolio_not_found",
+            status_code=404,
+        )
+
+
+class InvalidPortfolioNameError(AppError):
+    """The portfolio name is empty."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Enter a portfolio name.",
+            code="invalid_portfolio_name",
+            status_code=422,
+        )
+
+
+class DuplicatePortfolioNameError(AppError):
+    """This user already has a portfolio with the same name."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You already have a portfolio with this name.",
+            code="duplicate_portfolio_name",
+            status_code=409,
+        )
