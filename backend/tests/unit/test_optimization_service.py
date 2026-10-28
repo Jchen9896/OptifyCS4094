@@ -95,6 +95,7 @@ def test_run_returns_weights_and_metrics():
     assert result.current_expected_return is not None
     assert result.current_volatility >= 0
     assert any("historical estimates" in item.lower() for item in result.assumptions)
+    assert "Maximum weight per stock: None." in result.assumptions
 
 
 def test_run_uses_request_initial_capital():

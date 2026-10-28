@@ -138,10 +138,12 @@ class OptimizationService:
             [weight_map[ticker] for ticker in stats.tickers],
             capital,
         )
+        cap = "None" if max_weight is None else f"{max_weight * 100:g}%"
         assumptions = [
             *stats.assumptions,
             f"Price source: {batch.source}; interval {batch.interval}; basis {batch.adjustment_basis}.",
             f"Strategy: {selected.name} (long-only weights sum to 100%).",
+            f"Maximum weight per stock: {cap}.",
             f"Risk-free rate: {risk_free:g} (annual decimal).",
             f"Capital chart starts at {capital:g} with buy-and-hold weights.",
             "Results are historical estimates, not guaranteed outcomes.",
