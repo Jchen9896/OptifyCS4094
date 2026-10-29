@@ -11,8 +11,9 @@ from app.core.errors import (
 )
 from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
 
-# The planned setting. Refer to Decision 005.
+# The values of the settings. Refer to Decision 005.
 TOLERANCE = 1e-5
+SOLVER = "CLARABEL"
 RISK_FREE_RATE = 0.04
 STRATEGIES = [MinimumVarianceStrategy, MaxSharpeStrategy]
 
@@ -25,7 +26,7 @@ def run(strategy_class, covariance, max_weight=None, expected_returns=None, risk
     """Run a strategy. By default every stock returns 10%, which beats the risk-free rate."""
     if expected_returns is None:
         expected_returns = np.full(len(covariance), 0.10)
-    strategy = strategy_class(tolerance=TOLERANCE)
+    strategy = strategy_class(tolerance=TOLERANCE, solver=SOLVER)
     return strategy.compute_weights(np.asarray(expected_returns), covariance, max_weight, risk_free_rate)
 
 

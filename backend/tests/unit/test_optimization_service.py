@@ -52,7 +52,7 @@ def _service(
     return OptimizationService(
         reader=reader,  # type: ignore[arg-type]
         calendar=WeekdaySessionCalendar(),
-        strategies=[MinimumVarianceStrategy(1e-5), MaxSharpeStrategy(1e-5)],
+        strategies=[MinimumVarianceStrategy(1e-5, "CLARABEL"), MaxSharpeStrategy(1e-5, "CLARABEL")],
         annualization_factor=252.0,
         tolerance=1e-5,
         default_risk_free_rate=0.04,

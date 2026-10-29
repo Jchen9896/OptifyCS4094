@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # Calculation and optimization defaults (Decision 005 portfolio optimizer).
     annualization_factor: float = 252.0
     optimization_tolerance: float = 1e-5
+    # The CVXPY solver for all optimization strategies (Decision 005, "Rules").
+    optimization_solver: str = "CLARABEL"
     default_risk_free_rate: float = 0.04
     # An optimization needs at least the larger of these numbers of shared daily returns:
     # the minimum, or the minimum per stock x the number of stocks (Decision 005, "Minimum history").

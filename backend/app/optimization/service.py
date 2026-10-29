@@ -194,10 +194,11 @@ def create_optimization_service(settings: Settings, session: Session) -> Optimiz
         required_calendar=settings.market_data_calendar,
     )
     tolerance = settings.optimization_tolerance
+    solver = settings.optimization_solver
     return OptimizationService(
         reader=reader,
         calendar=WeekdaySessionCalendar(),
-        strategies=[MinimumVarianceStrategy(tolerance), MaxSharpeStrategy(tolerance)],
+        strategies=[MinimumVarianceStrategy(tolerance, solver), MaxSharpeStrategy(tolerance, solver)],
         annualization_factor=settings.annualization_factor,
         tolerance=tolerance,
         default_risk_free_rate=settings.default_risk_free_rate,
