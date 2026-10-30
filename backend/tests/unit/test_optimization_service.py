@@ -4,12 +4,17 @@ from datetime import date
 
 import pytest
 
+from app.core.config import Settings
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.market_data.base import PriceBar
 from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
 from app.optimization.service import OptimizationService
 from app.services.price_history_reader import PriceHistoryBatch
 from app.services.session_calendar import WeekdaySessionCalendar
+
+# The values in config.py, not from a local .env file. Refer to Decision 005.
+TOLERANCE = Settings.model_fields["optimization_tolerance"].default
+SOLVER = Settings.model_fields["optimization_solver"].default
 
 
 class FakeReader:
@@ -52,9 +57,9 @@ def _service(
     return OptimizationService(
         reader=reader,  # type: ignore[arg-type]
         calendar=WeekdaySessionCalendar(),
-        strategies=[MinimumVarianceStrategy(1e-5, "CLARABEL"), MaxSharpeStrategy(1e-5, "CLARABEL")],
+        strategies=[MinimumVarianceStrategy(TOLERANCE, SOLVER), MaxSharpeStrategy(TOLERANCE, SOLVER)],
         annualization_factor=252.0,
-        tolerance=1e-5,
+        tolerance=TOLERANCE,
         default_risk_free_rate=0.04,
         max_span_days=3650,
         initial_capital=100_000.0,
@@ -86,7 +91,7 @@ def test_run_returns_weights_and_metrics():
     )
 
     assert result.strategy == "min_variance"
-    assert abs(sum(result.weights.values()) - 1.0) < 1e-5
+    assert abs(sum(result.weights.values()) - 1.0) < TOLERANCE
     assert set(result.weights) == {"AAA", "BBB"}
     assert result.volatility >= 0
     assert result.initial_capital == 100_000.0
@@ -173,9 +178,9 @@ def test_run_max_sharpe_is_not_worse_than_the_current_allocation():
     )
 
     assert result.strategy == "max_sharpe"
-    assert abs(sum(result.weights.values()) - 1.0) < 1e-5
+    assert abs(sum(result.weights.values()) - 1.0) < TOLERANCE
     # The current allocation follows the rules, so max Sharpe must be at least as good.
-    assert result.sharpe_ratio >= result.current_sharpe_ratio - 1e-5
+    assert result.sharpe_ratio >= result.current_sharpe_ratio - TOLERANCE
 
 
 def test_run_rejects_an_unknown_strategy_and_lists_the_names():

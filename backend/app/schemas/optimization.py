@@ -18,6 +18,9 @@ class OptimizationRequest(BaseModel):
     strategy: str = "min_variance"
     max_weight: float | None = Field(default=None, gt=0, le=1)
     risk_free_rate: float | None = None
+    # Yearly targets (decimals) for the target strategies. Other strategies ignore them (Decision 005).
+    target_return: float | None = None
+    target_volatility: float | None = Field(default=None, gt=0)
     # Starting capital for equity curves (USD). Falls back to Settings when omitted.
     initial_capital: float | None = Field(default=None, gt=0)
     # Current portfolio weights in ticker order (decimals that sum to 1). Used for charts.

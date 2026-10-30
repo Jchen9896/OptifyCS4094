@@ -23,10 +23,8 @@ def check_rules_feasible(asset_count: int, max_weight: float | None, tolerance: 
         )
 
 
-def check_can_beat_risk_free_rate(
-    expected_returns: np.ndarray, risk_free_rate: float, max_weight: float | None, tolerance: float
-) -> None:
-    """Raise `NoPositiveExcessReturnError` if no allocation under the rules is expected to beat the risk-free rate.
+def highest_expected_return(expected_returns: np.ndarray, max_weight: float | None) -> float:
+    """Return the highest expected return of an allocation that follows the rules.
 
     Call `check_rules_feasible` first.
     """
@@ -37,6 +35,17 @@ def check_can_beat_risk_free_rate(
         share = min(cap, remaining)
         best_return += share * expected_return
         remaining -= share
+    return float(best_return)
+
+
+def check_can_beat_risk_free_rate(
+    expected_returns: np.ndarray, risk_free_rate: float, max_weight: float | None, tolerance: float
+) -> None:
+    """Raise `NoPositiveExcessReturnError` if no allocation under the rules is expected to beat the risk-free rate.
+
+    Call `check_rules_feasible` first.
+    """
+    best_return = highest_expected_return(expected_returns, max_weight)
     if best_return <= risk_free_rate + tolerance:
         message = (
             f"No allocation is expected to beat the risk-free rate of {risk_free_rate:.1%}. Under the "
