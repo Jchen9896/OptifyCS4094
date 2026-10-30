@@ -16,7 +16,10 @@ Calculate portfolio weights with a subclass of `OptimizationStrategy` in `backen
 - A strategy calls `check_rules_feasible` before it solves.
 - `weight_constraints` gives the solver the rules that do not depend on the size of the weights: no weight is negative, and no weight is more than `max_weight` of the total. Each strategy adds one rule that sets the size. Minimum variance uses "the weights add up to 1". Max Sharpe uses "the excess return is 1".
 - A strategy gives the covariance matrix to CVXPY through `cp.psd_wrap`. Validation is the only check of the matrix. Without `psd_wrap`, CVXPY does its own stricter check (smallest eigenvalue not below about -1e-10) and can reject a matrix that validation accepted.
-- No solver is named, so CVXPY uses its default. For both strategies, the default is OSQP. CLARABEL is also installed and is more accurate. If OSQP fails too often, use `problem.solve(solver="CLARABEL")` in `_solve`.
+- All strategies use one solver, from the setting `optimization_solver`: **CLARABEL**. Each strategy gets the solver through its constructor and gives it to `_solve`. We do not use the CVXPY default for quadratic problems (OSQP), for these reasons:
+  - OSQP solves only quadratic problems. CLARABEL also solves cone problems. A limit on volatility makes a cone problem.
+  - In a target-return problem near the highest expected return that the rules permit, OSQP failed in 17 of 100 tests. CLARABEL failed in 0 of 500 tests.
+  - For minimum variance and max Sharpe, CLARABEL was as fast as OSQP (about 4 to 8 ms for each solve). It had no failures in 600 tests with 2 to 50 stocks.
 - `_solve` accepts only the status `optimal`. `optimal_inaccurate` and all other statuses fail.
 - `_clean_and_check` calls `clean_weights` and then `find_rule_violations`. If a weight breaks a rule, the run fails.
 
@@ -65,12 +68,11 @@ All checks of calculated values use one absolute tolerance: **1e-5**. Each check
 
 Why 1e-5:
 
-- CVXPY sets the accuracy target of OSQP to 1e-5 (CVXPY 1.9.3; the OSQP default is 1e-3). A smaller tolerance rejects results that the solver accepts. In a test of 300 random problems, the largest solver error was 6.6e-6. With a tolerance of 1e-6, 2 of the 300 problems failed. With 1e-5, no problem failed for either strategy.
+- The tolerance must be larger than the errors of the solver. In 600 random problems (minimum variance and max Sharpe, 2 to 50 stocks), the largest CLARABEL error was 8.9e-7. Thus 1e-5 is more than 10 times the largest error. In this test, no correct result was rejected.
+- The tolerance also removes solver noise. CLARABEL often gives a very small weight to a stock that should get 0. In the same test, 423 of the 600 results had such weights, and the largest was 8.8e-6. The tolerance changes these weights to 0. With a smaller tolerance, for example 1e-6, some of these weights would stay as very small positions.
 - 1e-5 is 0.001% of the money. It is smaller than the last digit of a weight such as 12.34%.
 - Yearly variances are about 0.01 to 0.1, so 1e-5 is 0.1% of a value or less. A covariance estimate from 5 years of daily data has an error of about 4% or more.
 - The tolerance is correct only for yearly values. Daily values are about 252 times smaller, and 1e-5 is too large for them.
-
-Known limit: the OSQP stop rule permits errors of up to about 2e-5. Thus, in rare cases, OSQP can give `optimal` with weights that our check rejects. The user then gets `optimization_failed`, not incorrect weights. If this occurs frequently, use CLARABEL.
 
 ## Error mapping
 
@@ -86,7 +88,7 @@ Known limit: the OSQP stop rule permits errors of up to about 2e-5. Thus, in rar
 ## Add a new strategy
 
 1. Make a subclass of `OptimizationStrategy` in `backend/app/optimization/`. Give it a `name`.
-2. Get the tolerance through the constructor.
+2. Get the tolerance and the solver through the constructor.
 3. In `compute_weights`, call `check_rules_feasible`. Give the solver one size rule plus `weight_constraints`, and use `psd_wrap`. Then call `_solve` and `_clean_and_check`.
 4. Return the weights in ticker order.
 5. Add the class to `STRATEGIES` in `test_mean_variance.py`. Then the shared tests also run for the new strategy.
