@@ -4,6 +4,7 @@ import cvxpy as cp
 import numpy as np
 import pytest
 
+from app.core.config import Settings
 from app.core.errors import InfeasibleAllocationRulesError, NoPositiveExcessReturnError
 from app.optimization.constraints import (
     check_can_beat_risk_free_rate,
@@ -13,8 +14,8 @@ from app.optimization.constraints import (
     weight_constraints,
 )
 
-# The planned setting. Refer to Decision 005.
-TOLERANCE = 1e-5
+# The value in config.py, not from a local .env file. Refer to Decision 005.
+TOLERANCE = Settings.model_fields["optimization_tolerance"].default
 
 
 @pytest.mark.parametrize(

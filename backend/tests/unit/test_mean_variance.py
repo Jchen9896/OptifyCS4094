@@ -4,6 +4,7 @@ import cvxpy as cp
 import numpy as np
 import pytest
 
+from app.core.config import Settings
 from app.core.errors import (
     InfeasibleAllocationRulesError,
     NoPositiveExcessReturnError,
@@ -11,9 +12,9 @@ from app.core.errors import (
 )
 from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
 
-# The values of the settings. Refer to Decision 005.
-TOLERANCE = 1e-5
-SOLVER = "CLARABEL"
+# The values in config.py, not from a local .env file. Refer to Decision 005.
+TOLERANCE = Settings.model_fields["optimization_tolerance"].default
+SOLVER = Settings.model_fields["optimization_solver"].default
 RISK_FREE_RATE = 0.04
 STRATEGIES = [MinimumVarianceStrategy, MaxSharpeStrategy]
 
