@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.optimization.base import OptimizationStrategy
-from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy, TargetReturnStrategy
+from app.optimization.mean_variance import (
+    MaxSharpeStrategy,
+    MinimumVarianceStrategy,
+    TargetReturnStrategy,
+    TargetRiskStrategy,
+)
 from app.optimization.validation import validate_optimizer_input
 from app.repositories.price_repository import PriceRepository
 from app.schemas.optimization import EquityCurvePointSchema, OptimizationResult, OptimizerInput
@@ -215,6 +220,7 @@ def create_optimization_service(settings: Settings, session: Session) -> Optimiz
             MinimumVarianceStrategy(tolerance, solver),
             MaxSharpeStrategy(tolerance, solver),
             TargetReturnStrategy(tolerance, solver),
+            TargetRiskStrategy(tolerance, solver),
         ],
         annualization_factor=settings.annualization_factor,
         tolerance=tolerance,
