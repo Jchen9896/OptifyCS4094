@@ -110,6 +110,30 @@ backend\.venv\Scripts\python scripts\check_db.py
 
 Inside Compose, the API uses hostname `db` instead of `localhost`. Commit `.env.example` only. Keep `.env` local.
 
+## Save and load portfolios
+
+Apply migrations after the portfolio PR stack is merged:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+The setup page has Save, Find, and Load controls. Sign-in is not available yet.
+Enter an existing `users.id` UUID. The app does not create a user account here.
+Save creates a new portfolio; a name must be unique for that user. Load restores
+the saved allocation, quantities, dates, prices, and analysis settings. Load
+prices before saving a portfolio with assets. An empty portfolio can also be saved.
+
+Create new portfolio clears the setup form. It does not delete saved portfolios.
+Portfolios saved without setup inputs are still readable through the API.
+
+Run the frontend portfolio client tests with Node.js 22.18 or newer:
+
+```bash
+cd frontend
+node --test tests/portfolio/portfolioApi.test.ts
+```
+
 ## Tests
 
 Backend tests live in `backend/tests/` (`unit/`, `integration/`, `fixtures/`). Frontend tests live in `frontend/tests/`, grouped by feature.
