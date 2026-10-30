@@ -3,13 +3,15 @@
 import cvxpy as cp
 import numpy as np
 
-from app.core.errors import OptimizationFailedError
+from app.core.errors import InvalidOptimizationInputError, OptimizationFailedError
 from app.optimization.base import OptimizationStrategy
 from app.optimization.constraints import (
     check_can_beat_risk_free_rate,
     check_rules_feasible,
+    check_target_return_reachable,
     clean_weights,
     find_rule_violations,
+    highest_expected_return,
     weight_constraints,
 )
 
@@ -125,3 +127,65 @@ class MaxSharpeStrategy(OptimizationStrategy):
         # Divide by the total to get the real weights, which add up to 1.
         weights = scaled_weights.value / scaled_weights.value.sum()
         return _clean_and_check(weights, max_weight, self._tolerance)
+
+
+class TargetReturnStrategy(OptimizationStrategy):
+    """Finds the allocation with the lowest risk whose expected return is at least the target.
+
+    This is the mean-variance problem with a return target (Palomar, section 7.1.2, problem 7.3).
+    The rule is "at least the target". Thus a target at or below the minimum-variance return gives
+    the minimum-variance weights.
+    """
+
+    name = "target_return"
+
+    def __init__(self, tolerance: float, solver: str) -> None:
+        self._tolerance = tolerance
+        self._solver = solver
+
+    def compute_weights(
+        self,
+        expected_returns: np.ndarray,
+        covariance: np.ndarray,
+        max_weight: float | None,
+        risk_free_rate: float,
+        *,
+        target_return: float | None = None,
+        target_volatility: float | None = None,
+    ) -> np.ndarray:
+        """Return the lowest-risk weights with an expected return of at least `target_return`, in ticker order.
+
+        `risk_free_rate` and `target_volatility` are not used. The inputs must already be checked by
+        `validate_optimizer_input`.
+        """
+        if target_return is None:
+            raise InvalidOptimizationInputError("The target_return strategy needs a target return.")
+        asset_count = covariance.shape[0]
+        check_rules_feasible(asset_count, max_weight, self._tolerance)
+        check_target_return_reachable(expected_returns, target_return, max_weight, self._tolerance)
+        # The check accepts a target up to the tolerance above the highest return. No allocation reaches
+        # more than the highest return, so the solver gets the smaller of the two values.
+        required_return = min(target_return, highest_expected_return(expected_returns, max_weight))
+
+        weights = cp.Variable(asset_count)
+        # psd_wrap: refer to MinimumVarianceStrategy.
+        risk = cp.quad_form(weights, cp.psd_wrap(covariance))
+        constraints = [
+            cp.sum(weights) == 1,
+            expected_returns @ weights >= required_return,
+            *weight_constraints(weights, max_weight),
+        ]
+        _solve(cp.Problem(cp.Minimize(risk), constraints), self._solver)
+
+        result = _clean_and_check(weights.value, max_weight, self._tolerance)
+        if expected_returns @ result < target_return - self._tolerance:
+            raise OptimizationFailedError(f"{FAILURE_MESSAGE} The result does not reach the target return.")
+        return result
+
+    def assumptions(
+        self, *, target_return: float | None = None, target_volatility: float | None = None
+    ) -> list[str]:
+        """Return the line for the target return. `target_volatility` is not used."""
+        if target_return is None:
+            return []
+        return [f"Target return: at least {target_return * 100:g}%."]

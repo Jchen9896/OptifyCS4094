@@ -7,7 +7,7 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.market_data.base import PriceBar
-from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
+from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy, TargetReturnStrategy
 from app.optimization.service import OptimizationService
 from app.services.price_history_reader import PriceHistoryBatch
 from app.services.session_calendar import WeekdaySessionCalendar
@@ -57,7 +57,11 @@ def _service(
     return OptimizationService(
         reader=reader,  # type: ignore[arg-type]
         calendar=WeekdaySessionCalendar(),
-        strategies=[MinimumVarianceStrategy(TOLERANCE, SOLVER), MaxSharpeStrategy(TOLERANCE, SOLVER)],
+        strategies=[
+            MinimumVarianceStrategy(TOLERANCE, SOLVER),
+            MaxSharpeStrategy(TOLERANCE, SOLVER),
+            TargetReturnStrategy(TOLERANCE, SOLVER),
+        ],
         annualization_factor=252.0,
         tolerance=TOLERANCE,
         default_risk_free_rate=0.04,
@@ -181,6 +185,23 @@ def test_run_max_sharpe_is_not_worse_than_the_current_allocation():
     assert abs(sum(result.weights.values()) - 1.0) < TOLERANCE
     # The current allocation follows the rules, so max Sharpe must be at least as good.
     assert result.sharpe_ratio >= result.current_sharpe_ratio - TOLERANCE
+
+
+def test_run_gives_the_target_to_the_strategy_and_shows_it():
+    # The test prices give very large yearly returns. A 300% target is above the minimum-variance
+    # return (about 185%) and below the highest return (about 764%), so the target decides the weights.
+    result = _service(FakeReader(_two_stock_batch())).run(
+        ["AAA", "BBB"],
+        date(2026, 9, 1),
+        date(2026, 9, 4),
+        strategy="target_return",
+        max_weight=None,
+        risk_free_rate=0.04,
+        target_return=3.0,
+    )
+
+    assert result.expected_return == pytest.approx(3.0, abs=TOLERANCE)
+    assert "Target return: at least 300%." in result.assumptions
 
 
 def test_run_rejects_an_unknown_strategy_and_lists_the_names():
