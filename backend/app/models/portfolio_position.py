@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.portfolio import Portfolio
+from app.models.stock import Stock
 
 
 class PortfolioHolding(Base):
@@ -30,3 +31,4 @@ class PortfolioHolding(Base):
         nullable=False,
     )
     portfolio: Mapped[Portfolio] = relationship(back_populates="holdings")
+    stock: Mapped[Stock] = relationship()

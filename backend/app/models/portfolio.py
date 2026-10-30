@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Text, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -25,6 +25,7 @@ class Portfolio(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    setup: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
