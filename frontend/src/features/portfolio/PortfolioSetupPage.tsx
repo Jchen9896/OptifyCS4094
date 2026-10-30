@@ -28,6 +28,8 @@ import {
 import StockSearch from '../stock-search/components/StockSearch.tsx'
 import type { StockSearchResult } from '../stock-search/stockApi.ts'
 import HoldingsTable from './components/HoldingsTable.tsx'
+import PortfolioPersistenceControls from './components/PortfolioPersistenceControls.tsx'
+import type { PortfolioDraft } from './portfolioApi.ts'
 import {
   addHolding,
   removeHolding,
@@ -37,6 +39,10 @@ import {
   weightsAreComplete,
 } from './holdings.ts'
 import { TARGET_WEIGHT_TOTAL, type Holding } from './types.ts'
+
+const DEFAULT_SETUP = {
+  initialCapital: 100000, strategy: 'minvar', maxWeightPercent: 45, riskFreePercent: 4,
+}
 
 function defaultEndDate(): string {
   return new Date().toISOString().slice(0, 10)
@@ -52,16 +58,17 @@ function defaultStartDate(): string {
 export default function PortfolioSetupPage() {
   const navigate = useNavigate()
   const [portfolioName, setPortfolioName] = useState('Sample portfolio')
-  const [initialPortfolioValue, setInitialPortfolioValue] = useState('100000')
-  const [strategy, setStrategy] = useState('minvar')
-  const [maxWeight, setMaxWeight] = useState('45')
-  const [riskFree, setRiskFree] = useState('4')
+  const [initialPortfolioValue, setInitialPortfolioValue] = useState(String(DEFAULT_SETUP.initialCapital))
+  const [strategy, setStrategy] = useState(DEFAULT_SETUP.strategy)
+  const [maxWeight, setMaxWeight] = useState(String(DEFAULT_SETUP.maxWeightPercent))
+  const [riskFree, setRiskFree] = useState(String(DEFAULT_SETUP.riskFreePercent))
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [referencePrices, setReferencePrices] = useState<Record<string, number>>({})
   const [startDate, setStartDate] = useState(defaultStartDate)
   const [endDate, setEndDate] = useState(defaultEndDate)
   const [running, setRunning] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
+  const [historyKey, setHistoryKey] = useState(0)
 
   const disabledSymbols = useMemo(
     () => new Set(holdings.map((holding) => holding.symbol)),
@@ -96,6 +103,25 @@ export default function PortfolioSetupPage() {
     if (initialValue > 0) {
       setHoldings((current) => resyncQuantities(current, initialValue, prices))
     }
+  }
+
+  function handleLoadPortfolio(draft: PortfolioDraft) {
+    setPortfolioName(draft.portfolioName)
+    setInitialPortfolioValue(String(draft.initialCapital))
+    setStartDate(draft.startDate)
+    setEndDate(draft.endDate)
+    setStrategy(draft.strategy)
+    setMaxWeight(String(draft.maxWeightPercent))
+    setRiskFree(String(draft.riskFreePercent))
+    setHoldings(draft.holdings)
+    setReferencePrices(draft.referencePrices)
+    setRunError(null)
+    setHistoryKey((current) => current + 1)
+  }
+
+  function handleNewPortfolio() {
+    handleLoadPortfolio({ ...DEFAULT_SETUP, portfolioName: '', startDate: defaultStartDate(),
+      endDate: defaultEndDate(), holdings: [], referencePrices: {} })
   }
 
   async function handleRunAnalysis() {
@@ -151,11 +177,12 @@ export default function PortfolioSetupPage() {
             market data
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button">Create new portfolio</Button>
-          <Button type="button">Save portfolio</Button>
-        </div>
       </div>
+
+      <PortfolioPersistenceControls disabled={running} onLoad={handleLoadPortfolio}
+        onNew={handleNewPortfolio} draft={{ portfolioName, initialCapital: initialValue,
+          startDate, endDate, strategy, maxWeightPercent: Number(maxWeight),
+          riskFreePercent: Number(riskFree), holdings, referencePrices }} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
         <div className="space-y-6">
@@ -227,6 +254,7 @@ export default function PortfolioSetupPage() {
             </CardHeader>
             <CardContent>
               <HistoryPeriodPanel
+                key={historyKey}
                 holdings={holdings}
                 startDate={startDate}
                 endDate={endDate}
