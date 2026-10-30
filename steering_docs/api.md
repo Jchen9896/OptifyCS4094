@@ -84,7 +84,7 @@ Returns daily prices for one symbol and date range (Decision 006). Prefers store
 
 ## `PATCH /api/portfolios/{portfolio_id}?user_id=<uuid>`
 
-Renames one portfolio. The portfolio must belong to `user_id` (Decision 009). Create and read routes are not part of this API.
+Renames one portfolio. The portfolio must belong to `user_id` (Decision 009).
 
 **Request**
 
@@ -120,3 +120,46 @@ Deletes one portfolio and its holdings. The portfolio must belong to `user_id`.
 **204** with an empty body when the delete succeeds.
 
 **404** `portfolio_not_found` if the portfolio does not exist or another user owns it.
+
+## `POST /api/portfolios?user_id=<uuid>`
+
+Creates a portfolio for an existing user (Decision 010). The service trims the name and validates every ticker before a write. Holdings and setup are optional.
+
+```json
+{
+  "name": "Core",
+  "holdings": [{ "symbol": "AAPL", "quantity": "10.500000" }],
+  "setup": {
+    "initial_capital": 1050,
+    "start_date": "2026-01-01",
+    "end_date": "2026-02-01",
+    "strategy": "minvar",
+    "max_weight": 1,
+    "risk_free_rate": 0.04,
+    "weights": { "AAPL": 100 },
+    "reference_prices": { "AAPL": 100 }
+  }
+}
+```
+
+**201** returns `id`, `user_id`, `name`, `created_at`, `setup`, and `holdings`. Each holding has `symbol`, stored stock `name`, and decimal-string `quantity`.
+
+**404** `portfolio_user_not_found` for an unknown user or `ticker_not_found` for an unknown ticker.
+
+**409** `duplicate_portfolio_name` for a duplicate name within one user.
+
+**422** `invalid_portfolio_name` for a blank name; ticker validation errors follow Decision 003. Invalid quantities, duplicate normalized symbols, invalid setup inputs, and missing or malformed UUIDs return FastAPI validation errors. Quantity must be positive and fit `NUMERIC(18,6)`. Setup weights and prices must use exactly the holding symbols.
+
+**503** `market_data_unavailable` if ticker validation cannot reach the provider.
+
+## `GET /api/portfolios?user_id=<uuid>`
+
+**200** returns a JSON array of portfolio metadata (`id`, `user_id`, `name`, `created_at`), newest first. An unknown user or a user with no portfolios gets `[]`. The list contains only rows for the supplied user. Reads do not call a market data provider.
+
+## `GET /api/portfolios/{portfolio_id}?user_id=<uuid>`
+
+**200** returns the same detail fields as create, including stored quantities and the optional setup snapshot. Old portfolios can have `setup: null`.
+
+**404** `portfolio_not_found` if the portfolio is missing or has another owner.
+
+All portfolio routes use the temporary user UUID query parameter from Decision 009. This parameter is not authentication. Use an authenticated user dependency when sign-in is added.
