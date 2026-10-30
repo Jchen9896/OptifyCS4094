@@ -33,4 +33,6 @@ def run_optimization(
         risk_free_rate=body.risk_free_rate,
         current_weights=body.current_weights,
         initial_capital=body.initial_capital,
+        target_return=body.target_return,
+        target_volatility=body.target_volatility,
     )

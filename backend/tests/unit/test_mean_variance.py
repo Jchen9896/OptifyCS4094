@@ -7,28 +7,40 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import (
     InfeasibleAllocationRulesError,
+    InvalidOptimizationInputError,
     NoPositiveExcessReturnError,
     OptimizationFailedError,
+    UnreachableTargetError,
 )
-from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
+from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy, TargetReturnStrategy
 
 # The values in config.py, not from a local .env file. Refer to Decision 005.
 TOLERANCE = Settings.model_fields["optimization_tolerance"].default
 SOLVER = Settings.model_fields["optimization_solver"].default
 RISK_FREE_RATE = 0.04
-STRATEGIES = [MinimumVarianceStrategy, MaxSharpeStrategy]
+STRATEGIES = [MinimumVarianceStrategy, MaxSharpeStrategy, TargetReturnStrategy]
 
 # A: 20% volatility, B: 10% volatility, correlation 0.
 UNRELATED = np.array([[0.04, 0.0], [0.0, 0.01]])
 THREE_STOCKS = np.array([[0.090, 0.010, 0.008], [0.010, 0.025, 0.006], [0.008, 0.006, 0.030]])
 
 
-def run(strategy_class, covariance, max_weight=None, expected_returns=None, risk_free_rate=RISK_FREE_RATE):
-    """Run a strategy. By default every stock returns 10%, which beats the risk-free rate."""
-    if expected_returns is None:
-        expected_returns = np.full(len(covariance), 0.10)
+def run(
+    strategy_class, covariance, max_weight=None, expected_returns=None, risk_free_rate=RISK_FREE_RATE, **targets
+):
+    """Run a strategy. By default every stock returns 10%, which beats the risk-free rate.
+
+    Without `targets`, every allocation meets the targets: 1 point below the lowest expected return, and
+    1 point above the highest volatility of one stock (a long-only allocation is never riskier than that).
+    """
+    expected_returns = np.full(len(covariance), 0.10) if expected_returns is None else np.asarray(expected_returns)
+    if not targets:
+        targets = {
+            "target_return": expected_returns.min() - 0.01,
+            "target_volatility": np.sqrt(np.diag(covariance)).max() + 0.01,
+        }
     strategy = strategy_class(tolerance=TOLERANCE, solver=SOLVER)
-    return strategy.compute_weights(np.asarray(expected_returns), covariance, max_weight, risk_free_rate)
+    return strategy.compute_weights(expected_returns, covariance, max_weight, risk_free_rate, **targets)
 
 
 def sharpe(weights, expected_returns, covariance):
@@ -54,9 +66,11 @@ def test_three_stocks_match_the_exact_formula():
     assert weights == pytest.approx(exact, abs=TOLERANCE)
 
 
-def test_cap_moves_the_answer_to_the_limit():
+@pytest.mark.parametrize("strategy_class", [MinimumVarianceStrategy, TargetReturnStrategy])
+def test_cap_moves_the_answer_to_the_limit(strategy_class):
     # Without a cap the answer is 20/80. A 70% cap stops B at 70%, so A gets 30%.
-    weights = run(MinimumVarianceStrategy, UNRELATED, max_weight=0.7)
+    # Every allocation meets the default target return, so target return gives the minimum-variance answer.
+    weights = run(strategy_class, UNRELATED, max_weight=0.7)
 
     assert weights == pytest.approx([0.3, 0.7], abs=TOLERANCE)
 
@@ -164,6 +178,45 @@ def test_max_sharpe_is_never_worse_than_equal_weights_or_min_variance():
 def test_max_sharpe_rejects_returns_that_cannot_beat_the_risk_free_rate():
     with pytest.raises(NoPositiveExcessReturnError):
         run(MaxSharpeStrategy, UNRELATED, expected_returns=[0.03, 0.02])
+
+
+def test_target_return_two_unrelated_stocks_match_the_hand_formula():
+    # The return 12% w + 6% (1 - w) is at least 10% if w >= 2/3. The risk increases for w above 0.2
+    # (refer to the first minimum-variance test), so the lowest risk is at w = 2/3.
+    weights = run(TargetReturnStrategy, UNRELATED, expected_returns=[0.12, 0.06], target_return=0.10)
+
+    assert weights == pytest.approx([2 / 3, 1 / 3], abs=TOLERANCE)
+
+
+def test_target_return_three_stocks_match_the_exact_formula():
+    # Palomar, section 7.1.2: without the long-only rule, the allocation for risk aversion lambda is
+    # w = inverse(cov) (returns - g 1) / lambda, with g chosen so that the weights add up to 1. It has the
+    # lowest risk for its own expected return, so a target of that return must give it. Here lambda = 3 and
+    # all weights are positive, so the long-only rule does not change the answer.
+    expected_returns = np.array([0.12, 0.08, 0.10])
+    to_returns = np.linalg.solve(THREE_STOCKS, expected_returns)
+    to_ones = np.linalg.solve(THREE_STOCKS, np.ones(3))
+    g = (to_returns.sum() - 3.0) / to_ones.sum()
+    exact = (to_returns - g * to_ones) / 3.0
+    assert (exact > 0).all()
+
+    weights = run(
+        TargetReturnStrategy, THREE_STOCKS, expected_returns=expected_returns, target_return=exact @ expected_returns
+    )
+
+    assert weights == pytest.approx(exact, abs=TOLERANCE)
+
+
+def test_target_return_above_the_highest_return_is_rejected():
+    # With a 70% cap, the highest return is 70% x 12% + 30% x 6% = 10.2%.
+    with pytest.raises(UnreachableTargetError, match="at most 10.2%"):
+        run(TargetReturnStrategy, UNRELATED, max_weight=0.7, expected_returns=[0.12, 0.06], target_return=0.11)
+
+
+@pytest.mark.parametrize("strategy_class", [TargetReturnStrategy])
+def test_target_strategy_without_its_target_is_rejected(strategy_class):
+    with pytest.raises(InvalidOptimizationInputError, match="needs a target"):
+        run(strategy_class, UNRELATED, target_return=None, target_volatility=None)
 
 
 # The tests below apply to every strategy.
