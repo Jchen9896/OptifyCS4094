@@ -12,7 +12,7 @@ const ID = '11111111-1111-1111-1111-111111111111'
 function draft(): PortfolioDraft {
   return {
     portfolioName: ' Core ', initialCapital: 1000, startDate: '2026-01-01', endDate: '2026-02-01',
-    strategy: 'minvar', maxWeightPercent: 60, riskFreePercent: 4,
+    strategy: 'min_variance', maxWeightPercent: 60, riskFreePercent: 4,
     referencePrices: { AAPL: 100, MSFT: 200 },
     holdings: [
       { symbol: 'AAPL', name: 'Apple Inc.', quoteType: null, weightPercent: 50, quantity: 5 },
@@ -32,6 +32,14 @@ test('save and restore retain inputs, weights, quantities, and reference prices'
   assert.deepEqual(result, { ...draft(), portfolioName: 'Core' })
   assert.equal(buildPortfolioRequest(draft()).setup.max_weight, 0.6)
   assert.equal(buildPortfolioRequest(draft()).setup.risk_free_rate, 0.04)
+})
+
+test('save and restore preserve each current optimizer strategy', () => {
+  for (const strategy of ['min_variance', 'max_sharpe']) {
+    const body = buildPortfolioRequest({ ...draft(), strategy })
+    assert.equal(body.setup.strategy, strategy)
+    assert.equal(restorePortfolio({ ...saved(), setup: body.setup }).strategy, strategy)
+  }
 })
 
 test('round quantities to storage precision and reject values that round to zero', () => {

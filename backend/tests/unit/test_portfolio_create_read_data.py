@@ -99,7 +99,7 @@ def test_create_normalizes_symbols_and_rejects_duplicates():
 
 def snapshot(**changes):
     return dict(initial_capital=1000, start_date="2026-01-01", end_date="2026-02-01",
-                strategy="minvar", max_weight=1, risk_free_rate=0.04,
+                strategy="min_variance", max_weight=1, risk_free_rate=0.04,
                 weights={"AAPL": 100}, reference_prices={"AAPL": 100}, **changes)
 
 
@@ -120,3 +120,13 @@ def test_snapshot_keys_must_match_holdings():
         PortfolioCreateRequest(name="Core", setup=snapshot())
     request = PortfolioCreateRequest(name="Core", holdings=[{"symbol": "AAPL", "quantity": 10}], setup=snapshot())
     assert request.setup.model_dump(mode="json")["start_date"] == "2026-01-01"
+
+
+@pytest.mark.parametrize(("strategy", "expected"), [
+    ("min_variance", "min_variance"), ("max_sharpe", "max_sharpe"),
+    ("minvar", "min_variance"), ("mvo", "min_variance"),
+])
+def test_snapshot_uses_current_strategy_names_and_reads_old_aliases(strategy, expected):
+    data = snapshot()
+    data["strategy"] = strategy
+    assert PortfolioSetup(**data).strategy == expected

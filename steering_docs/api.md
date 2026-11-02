@@ -133,7 +133,7 @@ Creates a portfolio for an existing user (Decision 010). The service trims the n
     "initial_capital": 1050,
     "start_date": "2026-01-01",
     "end_date": "2026-02-01",
-    "strategy": "minvar",
+    "strategy": "min_variance",
     "max_weight": 1,
     "risk_free_rate": 0.04,
     "weights": { "AAPL": 100 },
@@ -143,6 +143,8 @@ Creates a portfolio for an existing user (Decision 010). The service trims the n
 ```
 
 **201** returns `id`, `user_id`, `name`, `created_at`, `setup`, and `holdings`. Each holding has `symbol`, stored stock `name`, and decimal-string `quantity`.
+
+Setup uses the current optimizer names, `min_variance` and `max_sharpe`. The old `minvar` and `mvo` values are accepted and returned as `min_variance`.
 
 **404** `portfolio_user_not_found` for an unknown user or `ticker_not_found` for an unknown ticker.
 

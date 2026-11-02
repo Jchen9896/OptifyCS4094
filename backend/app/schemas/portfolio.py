@@ -31,11 +31,17 @@ class PortfolioSetup(BaseModel):
     initial_capital: PositiveNumber
     start_date: date
     end_date: date
-    strategy: Literal["minvar", "mvo"]
+    strategy: Literal["min_variance", "max_sharpe"]
     max_weight: float = Field(gt=0, le=1, allow_inf_nan=False)
     risk_free_rate: float = Field(allow_inf_nan=False)
     weights: dict[str, Weight]
     reference_prices: dict[str, PositiveNumber]
+
+    @field_validator("strategy", mode="before")
+    @classmethod
+    def normalize_strategy(cls, value: object) -> object:
+        """Read old snapshots with the current minimum-variance strategy name."""
+        return "min_variance" if value in ("minvar", "mvo") else value
 
     @model_validator(mode="after")
     def check_dates(self) -> "PortfolioSetup":

@@ -112,7 +112,7 @@ Inside Compose, the API uses hostname `db` instead of `localhost`. Commit `.env.
 
 ## Save and load portfolios
 
-Apply migrations after the portfolio PR stack is merged:
+Apply migrations after the portfolio feature is merged:
 
 ```bash
 docker compose exec api alembic upgrade head
