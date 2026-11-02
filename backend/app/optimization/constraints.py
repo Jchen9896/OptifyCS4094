@@ -5,7 +5,7 @@ import math
 import cvxpy as cp
 import numpy as np
 
-from app.core.errors import InfeasibleAllocationRulesError, NoPositiveExcessReturnError
+from app.core.errors import InfeasibleAllocationRulesError, NoPositiveExcessReturnError, UnreachableTargetError
 
 
 def check_rules_feasible(asset_count: int, max_weight: float | None, tolerance: float) -> None:
@@ -23,10 +23,8 @@ def check_rules_feasible(asset_count: int, max_weight: float | None, tolerance: 
         )
 
 
-def check_can_beat_risk_free_rate(
-    expected_returns: np.ndarray, risk_free_rate: float, max_weight: float | None, tolerance: float
-) -> None:
-    """Raise `NoPositiveExcessReturnError` if no allocation under the rules is expected to beat the risk-free rate.
+def highest_expected_return(expected_returns: np.ndarray, max_weight: float | None) -> float:
+    """Return the highest expected return of an allocation that follows the rules.
 
     Call `check_rules_feasible` first.
     """
@@ -37,6 +35,17 @@ def check_can_beat_risk_free_rate(
         share = min(cap, remaining)
         best_return += share * expected_return
         remaining -= share
+    return float(best_return)
+
+
+def check_can_beat_risk_free_rate(
+    expected_returns: np.ndarray, risk_free_rate: float, max_weight: float | None, tolerance: float
+) -> None:
+    """Raise `NoPositiveExcessReturnError` if no allocation under the rules is expected to beat the risk-free rate.
+
+    Call `check_rules_feasible` first.
+    """
+    best_return = highest_expected_return(expected_returns, max_weight)
     if best_return <= risk_free_rate + tolerance:
         message = (
             f"No allocation is expected to beat the risk-free rate of {risk_free_rate:.1%}. Under the "
@@ -46,6 +55,27 @@ def check_can_beat_risk_free_rate(
         if max_weight is not None:
             message += " A larger maximum weight can also help."
         raise NoPositiveExcessReturnError(message)
+
+
+def check_target_return_reachable(
+    expected_returns: np.ndarray, target_return: float, max_weight: float | None, tolerance: float
+) -> None:
+    """Raise `UnreachableTargetError` if no allocation under the rules has an expected return of at least the target.
+
+    Call `check_rules_feasible` first.
+    """
+    best_return = highest_expected_return(expected_returns, max_weight)
+    if target_return > best_return + tolerance:
+        # Round down to the next 0.1%. The check accepts targets up to the tolerance above the highest return,
+        # so the suggested target is always accepted.
+        suggestion = math.floor((best_return + tolerance) * 1000) / 1000
+        message = (
+            f"No allocation under the allocation rules reaches an expected return of {target_return * 100:g}%. "
+            f"Choose a target of at most {suggestion:.1%}."
+        )
+        if max_weight is not None:
+            message += " A larger maximum weight can also help."
+        raise UnreachableTargetError(message)
 
 
 def weight_constraints(weights: cp.Variable, max_weight: float | None) -> list[cp.Constraint]:

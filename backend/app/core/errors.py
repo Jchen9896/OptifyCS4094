@@ -36,6 +36,13 @@ class NoPositiveExcessReturnError(AppError):
         super().__init__(message, code="no_positive_excess_return", status_code=422)
         
         
+class UnreachableTargetError(AppError):
+    """No allocation that follows the rules reaches the target return or the target volatility."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="unreachable_target", status_code=422)
+
+
 class MarketDataUnavailableError(AppError):
     """The market data source failed or did not respond."""
 
