@@ -16,7 +16,10 @@ Calculate portfolio weights with a subclass of `OptimizationStrategy` in `backen
 - A strategy calls `check_rules_feasible` before it solves.
 - `weight_constraints` gives the solver the rules that do not depend on the size of the weights: no weight is negative, and no weight is more than `max_weight` of the total. Each strategy adds one rule that sets the size. Minimum variance uses "the weights add up to 1". Max Sharpe uses "the excess return is 1".
 - A strategy gives the covariance matrix to CVXPY through `cp.psd_wrap`. Validation is the only check of the matrix. Without `psd_wrap`, CVXPY does its own stricter check (smallest eigenvalue not below about -1e-10) and can reject a matrix that validation accepted.
-- No solver is named, so CVXPY uses its default. For both strategies, the default is OSQP. CLARABEL is also installed and is more accurate. If OSQP fails too often, use `problem.solve(solver="CLARABEL")` in `_solve`.
+- All strategies use one solver, from the setting `optimization_solver`: **CLARABEL**. Each strategy gets the solver through its constructor and gives it to `_solve`. We do not use the CVXPY default for quadratic problems (OSQP), for these reasons:
+  - OSQP solves only quadratic problems. CLARABEL also solves cone problems. A limit on volatility makes a cone problem.
+  - In a target-return problem near the highest expected return that the rules permit, OSQP failed in 17 of 100 tests. CLARABEL failed in 0 of 500 tests.
+  - For minimum variance and max Sharpe, CLARABEL was as fast as OSQP (about 4 to 8 ms for each solve). It had no failures in 600 tests with 2 to 50 stocks.
 - `_solve` accepts only the status `optimal`. `optimal_inaccurate` and all other statuses fail.
 - `_clean_and_check` calls `clean_weights` and then `find_rule_violations`. If a weight breaks a rule, the run fails.
 
@@ -33,6 +36,23 @@ This works only if an allocation under the rules has an expected return above th
 
 Known limit: max Sharpe is very sensitive to the expected returns (Palomar, section 7.5). Small errors in the expected returns can move most of the money into one or two stocks. A `max_weight` cap decreases this problem.
 
+## Minimum history
+
+Too few daily returns give an unreliable covariance matrix. The optimizer then gives weights that look exact but are mostly noise. Thus `OptimizationService` needs this number of daily returns that all stocks share:
+
+required = max(`min_return_observations`, `min_return_observations_per_stock` x number of stocks)
+
+The values are in `Settings`: **60** and **10**. With fewer returns, the run fails with `insufficient_history`.
+
+Why these values:
+
+- Coqueret and Milhau (EDHEC, 2013, "Estimating Covariance Matrices for Portfolio Optimization") give 3 returns per stock as the minimum for portfolio optimization, from Pantaleo et al. (2011).
+- We tested the values manually with the daily returns of 20 S&P 500 stocks from 2005 to 2022, long-only weights and a 45% cap. Each test used 5 years of returns as the true values, took a sample of T days from them, and compared the result with the result from the true covariance.
+- With 3 returns per stock, the portfolio was about 9% riskier than the best portfolio, and the risk that the app showed was more than 20% too low. With 10 returns per stock, these errors were about 4% and 10% for 5, 10 and 20 stocks.
+- For small portfolios, 10 per stock is too few (20 returns for 2 stocks). The minimum of 60 is a rough value from the same manual tests and a practical value: about 12 weeks of trading days. With 60 returns, a 5-stock portfolio had errors of about 4% and 8%.
+- The minimum protects only the covariance matrix. It does not make the expected returns reliable. The error of a yearly mean return is about volatility / √(number of years). More days in the same period do not make it smaller (Merton, 1980). Max Sharpe stays sensitive to expected returns (refer to "Maximum Sharpe ratio").
+- We also tested Ledoit-Wolf shrinkage of the covariance matrix. With long-only weights, it did not decrease the risk out of sample, so the optimizer uses the sample covariance.
+
 ## Tolerance
 
 All checks of calculated values use one absolute tolerance: **1e-5**. Each check gets the tolerance as a parameter. The optimization service will get the value from `Settings`. Values that are not calculated (counts, dates, `max_weight`) are compared exactly.
@@ -48,17 +68,18 @@ All checks of calculated values use one absolute tolerance: **1e-5**. Each check
 
 Why 1e-5:
 
-- CVXPY sets the accuracy target of OSQP to 1e-5 (CVXPY 1.9.3; the OSQP default is 1e-3). A smaller tolerance rejects results that the solver accepts. In a test of 300 random problems, the largest solver error was 6.6e-6. With a tolerance of 1e-6, 2 of the 300 problems failed. With 1e-5, no problem failed for either strategy.
+- The tolerance must be larger than the errors of the solver. In 600 random problems (minimum variance and max Sharpe, 2 to 50 stocks), the largest CLARABEL error was 8.9e-7. Thus 1e-5 is more than 10 times the largest error. In this test, no correct result was rejected.
+- The tolerance also removes solver noise. CLARABEL often gives a very small weight to a stock that should get 0. In the same test, 423 of the 600 results had such weights, and the largest was 8.8e-6. The tolerance changes these weights to 0. With a smaller tolerance, for example 1e-6, some of these weights would stay as very small positions.
 - 1e-5 is 0.001% of the money. It is smaller than the last digit of a weight such as 12.34%.
 - Yearly variances are about 0.01 to 0.1, so 1e-5 is 0.1% of a value or less. A covariance estimate from 5 years of daily data has an error of about 4% or more.
 - The tolerance is correct only for yearly values. Daily values are about 252 times smaller, and 1e-5 is too large for them.
-
-Known limit: the OSQP stop rule permits errors of up to about 2e-5. Thus, in rare cases, OSQP can give `optimal` with weights that our check rejects. The user then gets `optimization_failed`, not incorrect weights. If this occurs frequently, use CLARABEL.
 
 ## Error mapping
 
 | Result | Code | HTTP |
 | --- | --- | --- |
+| The request has a value of the wrong type or range, NaN or Infinity (for example, `max_weight` above 1) | `invalid_request` | 422 |
+| The stocks share fewer daily returns than the minimum (refer to "Minimum history") | `insufficient_history` | 422 |
 | The inputs do not agree (duplicate tickers, dates, sizes, missing values, bad covariance matrix) | `invalid_optimization_input` | 422 |
 | `max_weight` is too small for the number of stocks | `infeasible_allocation_rules` | 422 |
 | Max Sharpe only: no allocation under the rules beats the risk-free rate | `no_positive_excess_return` | 422 |
@@ -67,7 +88,7 @@ Known limit: the OSQP stop rule permits errors of up to about 2e-5. Thus, in rar
 ## Add a new strategy
 
 1. Make a subclass of `OptimizationStrategy` in `backend/app/optimization/`. Give it a `name`.
-2. Get the tolerance through the constructor.
+2. Get the tolerance and the solver through the constructor.
 3. In `compute_weights`, call `check_rules_feasible`. Give the solver one size rule plus `weight_constraints`, and use `psd_wrap`. Then call `_solve` and `_clean_and_check`.
 4. Return the weights in ticker order.
 5. Add the class to `STRATEGIES` in `test_mean_variance.py`. Then the shared tests also run for the new strategy.
