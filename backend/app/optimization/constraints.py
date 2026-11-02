@@ -5,7 +5,7 @@ import math
 import cvxpy as cp
 import numpy as np
 
-from app.core.errors import InfeasibleAllocationRulesError
+from app.core.errors import InfeasibleAllocationRulesError, NoPositiveExcessReturnError
 
 
 def check_rules_feasible(asset_count: int, max_weight: float | None, tolerance: float) -> None:
@@ -21,6 +21,31 @@ def check_rules_feasible(asset_count: int, max_weight: float | None, tolerance: 
             f"{largest_total:.1%} of the money can be invested. "
             f"Use a maximum weight of at least {smallest_cap:.1%} or add more stocks."
         )
+
+
+def check_can_beat_risk_free_rate(
+    expected_returns: np.ndarray, risk_free_rate: float, max_weight: float | None, tolerance: float
+) -> None:
+    """Raise `NoPositiveExcessReturnError` if no allocation under the rules is expected to beat the risk-free rate.
+
+    Call `check_rules_feasible` first.
+    """
+    cap = 1.0 if max_weight is None else max_weight
+    best_return, remaining = 0.0, 1.0
+    # Put as much money as the cap allows in the stocks with the highest expected returns first.
+    for expected_return in sorted(expected_returns, reverse=True):
+        share = min(cap, remaining)
+        best_return += share * expected_return
+        remaining -= share
+    if best_return <= risk_free_rate + tolerance:
+        message = (
+            f"No allocation is expected to beat the risk-free rate of {risk_free_rate:.1%}. Under the "
+            f"allocation rules, the highest expected return is {best_return:.1%}. "
+            "Use minimum variance or add stocks with higher expected returns."
+        )
+        if max_weight is not None:
+            message += " A larger maximum weight can also help."
+        raise NoPositiveExcessReturnError(message)
 
 
 def weight_constraints(weights: cp.Variable, max_weight: float | None) -> list[cp.Constraint]:

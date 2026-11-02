@@ -27,6 +27,13 @@ class OptimizationFailedError(AppError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, code="optimization_failed", status_code=422)
+
+
+class NoPositiveExcessReturnError(AppError):
+    """No allocation that follows the rules is expected to beat the risk-free rate, so max Sharpe has no answer."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="no_positive_excess_return", status_code=422)
         
         
 class MarketDataUnavailableError(AppError):

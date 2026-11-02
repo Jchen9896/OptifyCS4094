@@ -33,7 +33,10 @@ def validate_optimizer_input(data: OptimizerInput, tolerance: float) -> tuple[np
     expected_returns = np.asarray(data.expected_returns, dtype=float)
     covariance = np.asarray(data.covariance, dtype=float)
 
-    if not (np.isfinite(expected_returns).all() and np.isfinite(covariance).all()):
+    inputs_are_finite = np.isfinite(expected_returns).all() and np.isfinite(covariance).all()
+    if data.risk_free_rate is not None:
+        inputs_are_finite = inputs_are_finite and np.isfinite(data.risk_free_rate)
+    if not inputs_are_finite:
         raise InvalidOptimizationInputError("The inputs contain missing or infinite values.")
     # rtol=0 turns off the extra percentage allowance that NumPy adds by default.
     # Then `tolerance` is the only allowance, as in the other checks.

@@ -43,6 +43,7 @@ def test_valid_input_returns_arrays():
         ({"covariance": [[0.04, 0.0], [0.0]]}, "2 rows and 2 columns"),
         ({"expected_returns": [float("nan"), 0.05]}, "missing or infinite"),
         ({"covariance": [[0.04, 0.0], [0.0, float("inf")]]}, "missing or infinite"),
+        ({"risk_free_rate": float("nan")}, "missing or infinite"),
         ({"covariance": [[0.04, 0.01], [0.0, 0.01]]}, "not symmetric"),
         ({"covariance": [[0.04, 0.05], [0.05, 0.01]]}, "not valid"),
         ({"covariance": [[-0.04, 0.0], [0.0, 0.01]]}, "not valid"),

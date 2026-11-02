@@ -4,8 +4,9 @@ import cvxpy as cp
 import numpy as np
 import pytest
 
-from app.core.errors import InfeasibleAllocationRulesError
+from app.core.errors import InfeasibleAllocationRulesError, NoPositiveExcessReturnError
 from app.optimization.constraints import (
+    check_can_beat_risk_free_rate,
     check_rules_feasible,
     clean_weights,
     find_rule_violations,
@@ -36,6 +37,35 @@ def test_infeasible_rules_are_rejected():
 def test_total_just_below_100_percent_is_rejected():
     with pytest.raises(InfeasibleAllocationRulesError):
         check_rules_feasible(4, 0.2499, TOLERANCE)
+
+
+@pytest.mark.parametrize(
+    ("expected_returns", "max_weight"),
+    [
+        ([0.10, 0.02], None),  # All in the first stock: 10%.
+        ([0.10, 0.01, 0.01], 0.4),  # Best under the cap: 0.4 x 10% + 0.4 x 1% + 0.2 x 1% = 4.6%.
+    ],
+)
+def test_returns_that_can_beat_the_risk_free_rate_are_accepted(expected_returns, max_weight):
+    check_can_beat_risk_free_rate(np.array(expected_returns), 0.04, max_weight, TOLERANCE)
+
+
+@pytest.mark.parametrize(
+    ("expected_returns", "max_weight", "risk_free_rate", "message"),
+    [
+        ([0.03, 0.02], None, 0.04, "highest expected return is 3.0%"),
+        # One stock returns 10%, but the cap allows at most 0.34 x 10% + 0.34 x 1% + 0.32 x 1% = 4.06%.
+        ([0.10, 0.01, 0.01], 0.34, 0.05, "highest expected return is 4.1%"),
+    ],
+)
+def test_returns_that_cannot_beat_the_risk_free_rate_are_rejected(
+    expected_returns, max_weight, risk_free_rate, message
+):
+    with pytest.raises(NoPositiveExcessReturnError, match=message) as error:
+        check_can_beat_risk_free_rate(np.array(expected_returns), risk_free_rate, max_weight, TOLERANCE)
+
+    assert error.value.code == "no_positive_excess_return"
+    assert error.value.status_code == 422
 
 
 @pytest.mark.parametrize(("max_weight", "expected_first_weight"), [(None, 1.0), (0.4, 0.4)])
