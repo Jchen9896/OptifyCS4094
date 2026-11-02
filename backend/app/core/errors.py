@@ -142,6 +142,17 @@ class PortfolioNotFoundError(AppError):
         )
 
 
+class PortfolioUserNotFoundError(AppError):
+    """A create request names a user that does not exist."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The portfolio user was not found. Use an existing user ID.",
+            code="portfolio_user_not_found",
+            status_code=404,
+        )
+
+
 class InvalidPortfolioNameError(AppError):
     """The portfolio name is empty."""
 
