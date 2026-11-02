@@ -2,11 +2,15 @@
 
 from datetime import date
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OptimizationRequest(BaseModel):
     """HTTP body for one optimization run from stored history."""
+
+    # Reject NaN and Infinity. Python's JSON parser accepts them, but they give an
+    # incorrect result (for example, null values in the equity curve).
+    model_config = ConfigDict(allow_inf_nan=False)
 
     tickers: list[str] = Field(min_length=2)
     start_date: date
