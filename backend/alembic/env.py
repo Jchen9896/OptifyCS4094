@@ -7,8 +7,11 @@ from app.core.config import get_settings
 from app.core.db import Base
 
 # Import models so Base.metadata includes their tables for autogenerate and upgrades.
+from app.models import portfolio as _portfolio  # noqa: F401
+from app.models import portfolio_position as _portfolio_position  # noqa: F401
 from app.models import price_history as _price_history  # noqa: F401
 from app.models import stock as _stock  # noqa: F401
+from app.models import user as _user  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
