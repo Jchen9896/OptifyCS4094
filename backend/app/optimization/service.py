@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.optimization.base import OptimizationStrategy
+from app.optimization.black_litterman import BlackLittermanEstimator
 from app.optimization.mean_variance import (
     MaxSharpeStrategy,
     MinimumVarianceStrategy,
@@ -20,6 +21,7 @@ from app.schemas.optimization import EquityCurvePointSchema, OptimizationResult,
 from app.services.calculation_service import calculate_portfolio_statistics
 from app.services.equity_curve import build_equity_curve
 from app.services.history_validation import validate_date_range
+from app.services.market_data_service import MarketDataService, create_market_data_service
 from app.services.price_history_reader import StoredPriceHistoryReader
 from app.services.session_calendar import SessionCalendar, WeekdaySessionCalendar
 
@@ -33,6 +35,8 @@ class OptimizationService:
         calendar: SessionCalendar,
         strategies: list[OptimizationStrategy],
         *,
+        market_history: MarketDataService,
+        return_estimator: BlackLittermanEstimator,
         annualization_factor: float,
         tolerance: float,
         default_risk_free_rate: float,
@@ -45,6 +49,8 @@ class OptimizationService:
         self._calendar = calendar
         # A request selects a strategy by its `name`, for example "min_variance" or "max_sharpe".
         self._strategies = {item.name: item for item in strategies}
+        self._market_history = market_history
+        self._return_estimator = return_estimator
         self._annualization_factor = annualization_factor
         self._tolerance = tolerance
         self._default_risk_free_rate = default_risk_free_rate
@@ -90,16 +96,24 @@ class OptimizationService:
         if capital <= 0:
             raise InvalidOptimizationInputError("Initial portfolio value must be greater than zero.")
 
-        batch = self._reader.read_adjusted_history(normalized, start_date, end_date)
+        # The prior needs the market index. Read its prices from the database, or get them from the provider if
+        # the database does not have the full period. Only the market index can do this (Decision 009, "Data rule").
+        market_ticker = self._return_estimator.market_ticker
+        self._market_history.get_or_fetch_history(market_ticker, start_date, end_date)
+        # Calculate the statistics of the stocks and the market index together, so that all use the same days.
+        stats_tickers = normalized if market_ticker in normalized else [*normalized, market_ticker]
+
+        batch = self._reader.read_adjusted_history(stats_tickers, start_date, end_date)
         sessions = self._calendar.sessions_in_range(start_date, end_date)
         stats = calculate_portfolio_statistics(
             batch.histories,
-            normalized,
+            stats_tickers,
             sessions,
             self._annualization_factor,
         )
         # Too few returns give an unreliable covariance matrix (Decision 005, "Minimum history").
-        stock_count = len(stats.tickers)
+        # Count only the selected stocks. The market index gets no weight.
+        stock_count = len(normalized)
         required = max(self._min_observations, self._min_observations_per_stock * stock_count)
         if stats.observation_count < required:
             raise InsufficientHistoryError(
@@ -107,17 +121,30 @@ class OptimizationService:
                 f"in this period. The optimizer needs at least {required}: {self._min_observations_per_stock} "
                 f"per stock, and at least {self._min_observations} in total. Choose a longer period."
             )
+        # The selected stocks come first in `stats_tickers`, in the request order.
+        mean_returns = np.asarray(stats.annualized_mean_returns, dtype=float)
+        stats_covariance = np.asarray(stats.annualized_covariance, dtype=float)
+        market_position = stats_tickers.index(market_ticker)
         optimizer_input = OptimizerInput(
-            tickers=stats.tickers,
-            expected_returns=stats.annualized_mean_returns,
-            covariance=stats.annualized_covariance,
+            tickers=normalized,
+            expected_returns=mean_returns[:stock_count].tolist(),
+            covariance=stats_covariance[:stock_count, :stock_count].tolist(),
             strategy=selected.name,
             max_weight=max_weight,
             risk_free_rate=risk_free,
             period_start=start_date,
             period_end=end_date,
         )
+        # Validate the historical inputs. Then replace the historical means with Black–Litterman expected returns.
         expected, covariance = validate_optimizer_input(optimizer_input, self._tolerance)
+        years = stats.observation_count / self._annualization_factor
+        expected = self._return_estimator.estimate(
+            expected,
+            stats_covariance[:stock_count, market_position],
+            stats_covariance[market_position, market_position],
+            years,
+            risk_free,
+        )
         weights = selected.compute_weights(
             expected,
             covariance,
@@ -130,12 +157,12 @@ class OptimizationService:
             weights, expected, covariance, risk_free
         )
 
-        weight_map = {ticker: float(weight) for ticker, weight in zip(stats.tickers, weights)}
+        weight_map = {ticker: float(weight) for ticker, weight in zip(normalized, weights)}
         if current_weights is None:
-            equal = 1.0 / len(stats.tickers)
-            current_list = [equal] * len(stats.tickers)
+            equal = 1.0 / len(normalized)
+            current_list = [equal] * len(normalized)
         else:
-            if len(current_weights) != len(stats.tickers):
+            if len(current_weights) != len(normalized):
                 raise InvalidOptimizationInputError(
                     "current_weights must have one value for each ticker, in ticker order."
                 )
@@ -150,14 +177,15 @@ class OptimizationService:
         )
         curve = build_equity_curve(
             batch.histories,
-            stats.tickers,
+            normalized,
             current_list,
-            [weight_map[ticker] for ticker in stats.tickers],
+            [weight_map[ticker] for ticker in normalized],
             capital,
         )
         cap = "None" if max_weight is None else f"{max_weight * 100:g}%"
         assumptions = [
             *stats.assumptions,
+            *self._return_estimator.assumptions(years),
             f"Price source: {batch.source}; interval {batch.interval}; basis {batch.adjustment_basis}.",
             f"Strategy: {selected.name} (long-only weights sum to 100%).",
             f"Maximum weight per stock: {cap}.",
@@ -222,6 +250,10 @@ def create_optimization_service(settings: Settings, session: Session) -> Optimiz
             TargetReturnStrategy(tolerance, solver),
             TargetRiskStrategy(tolerance, solver),
         ],
+        market_history=create_market_data_service(settings, session),
+        return_estimator=BlackLittermanEstimator(
+            settings.equity_risk_premium, settings.black_litterman_tau, settings.market_proxy_ticker
+        ),
         annualization_factor=settings.annualization_factor,
         tolerance=tolerance,
         default_risk_free_rate=settings.default_risk_free_rate,

@@ -7,6 +7,7 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.market_data.base import PriceBar
+from app.optimization.black_litterman import BlackLittermanEstimator
 from app.optimization.mean_variance import (
     MaxSharpeStrategy,
     MinimumVarianceStrategy,
@@ -17,9 +18,12 @@ from app.optimization.service import OptimizationService
 from app.services.price_history_reader import PriceHistoryBatch
 from app.services.session_calendar import WeekdaySessionCalendar
 
-# The values in config.py, not from a local .env file. Refer to Decision 005.
+# The values in config.py, not from a local .env file. Refer to Decisions 005 and 009.
 TOLERANCE = Settings.model_fields["optimization_tolerance"].default
 SOLVER = Settings.model_fields["optimization_solver"].default
+EQUITY_RISK_PREMIUM = Settings.model_fields["equity_risk_premium"].default
+TAU = Settings.model_fields["black_litterman_tau"].default
+MARKET_TICKER = Settings.model_fields["market_proxy_ticker"].default
 
 
 class FakeReader:
@@ -34,17 +38,26 @@ class FakeReader:
         return self.batch
 
 
+class FakeMarketHistory:
+    def __init__(self):
+        self.calls = []
+
+    def get_or_fetch_history(self, symbol, start, end):
+        self.calls.append((symbol, start, end))
+
+
 def _bar(day: date, close: float) -> PriceBar:
     return PriceBar(date=day, open=close, high=close, low=close, close=close, volume=0)
 
 
 def _two_stock_batch() -> PriceHistoryBatch:
-    """Four days of prices for two stocks, so three daily returns."""
+    """Four days of prices for two stocks and the market index, so three daily returns."""
     days = [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4)]
     return PriceHistoryBatch(
         histories={
             "AAA": [_bar(day, close) for day, close in zip(days, [100, 110, 99, 108])],
             "BBB": [_bar(day, close) for day, close in zip(days, [100, 90, 99, 95])],
+            MARKET_TICKER: [_bar(day, close) for day, close in zip(days, [100, 101, 99, 102])],
         },
         source="yfinance",
         interval="1d",
@@ -58,6 +71,7 @@ def _service(
     reader: FakeReader,
     min_observations: int = 3,
     min_observations_per_stock: int = 1,
+    market_history: FakeMarketHistory | None = None,
 ) -> OptimizationService:
     return OptimizationService(
         reader=reader,  # type: ignore[arg-type]
@@ -68,6 +82,8 @@ def _service(
             TargetReturnStrategy(TOLERANCE, SOLVER),
             TargetRiskStrategy(TOLERANCE, SOLVER),
         ],
+        market_history=FakeMarketHistory() if market_history is None else market_history,  # type: ignore[arg-type]
+        return_estimator=BlackLittermanEstimator(EQUITY_RISK_PREMIUM, TAU, MARKET_TICKER),
         annualization_factor=252.0,
         tolerance=TOLERANCE,
         default_risk_free_rate=0.04,
@@ -79,18 +95,8 @@ def _service(
 
 
 def test_run_returns_weights_and_metrics():
-    days = [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4)]
-    batch = PriceHistoryBatch(
-        histories={
-            "AAA": [_bar(day, close) for day, close in zip(days, [100, 110, 99, 108])],
-            "BBB": [_bar(day, close) for day, close in zip(days, [100, 90, 99, 95])],
-        },
-        source="yfinance",
-        interval="1d",
-        adjustment_basis="split_dividend_adjusted",
-        calendar="XNYS",
-    )
-    result = _service(FakeReader(batch)).run(
+    market_history = FakeMarketHistory()
+    result = _service(FakeReader(_two_stock_batch()), market_history=market_history).run(
         ["AAA", "BBB"],
         date(2026, 9, 1),
         date(2026, 9, 4),
@@ -102,7 +108,10 @@ def test_run_returns_weights_and_metrics():
 
     assert result.strategy == "min_variance"
     assert abs(sum(result.weights.values()) - 1.0) < TOLERANCE
+    # The market index is loaded once for the expected returns, and it gets no weight.
+    assert market_history.calls == [(MARKET_TICKER, date(2026, 9, 1), date(2026, 9, 4))]
     assert set(result.weights) == {"AAA", "BBB"}
+    assert any(item.startswith("Expected returns: Black–Litterman.") for item in result.assumptions)
     assert result.volatility >= 0
     assert result.initial_capital == 100_000.0
     assert len(result.equity_curve) >= 2
@@ -114,18 +123,7 @@ def test_run_returns_weights_and_metrics():
 
 
 def test_run_uses_request_initial_capital():
-    days = [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4)]
-    batch = PriceHistoryBatch(
-        histories={
-            "AAA": [_bar(day, close) for day, close in zip(days, [100, 110, 99, 108])],
-            "BBB": [_bar(day, close) for day, close in zip(days, [100, 90, 99, 95])],
-        },
-        source="yfinance",
-        interval="1d",
-        adjustment_basis="split_dividend_adjusted",
-        calendar="XNYS",
-    )
-    result = _service(FakeReader(batch)).run(
+    result = _service(FakeReader(_two_stock_batch())).run(
         ["AAA", "BBB"],
         date(2026, 9, 1),
         date(2026, 9, 4),
@@ -166,18 +164,7 @@ def test_run_surfaces_missing_stored_history():
 
 
 def test_run_max_sharpe_is_not_worse_than_the_current_allocation():
-    days = [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4)]
-    batch = PriceHistoryBatch(
-        histories={
-            "AAA": [_bar(day, close) for day, close in zip(days, [100, 110, 99, 108])],
-            "BBB": [_bar(day, close) for day, close in zip(days, [100, 90, 99, 95])],
-        },
-        source="yfinance",
-        interval="1d",
-        adjustment_basis="split_dividend_adjusted",
-        calendar="XNYS",
-    )
-    result = _service(FakeReader(batch)).run(
+    result = _service(FakeReader(_two_stock_batch())).run(
         ["AAA", "BBB"],
         date(2026, 9, 1),
         date(2026, 9, 4),
@@ -194,8 +181,8 @@ def test_run_max_sharpe_is_not_worse_than_the_current_allocation():
 
 
 def test_run_gives_the_target_to_the_strategy_and_shows_it():
-    # The test prices give very large yearly returns. A 300% target is above the minimum-variance
-    # return (about 185%) and below the highest return (about 764%), so the target decides the weights.
+    # With the Black–Litterman returns of the test prices, a 10% target is above the minimum-variance
+    # return (about 5.6%) and below the highest return (about 24.5%), so the target decides the weights.
     result = _service(FakeReader(_two_stock_batch())).run(
         ["AAA", "BBB"],
         date(2026, 9, 1),
@@ -203,11 +190,11 @@ def test_run_gives_the_target_to_the_strategy_and_shows_it():
         strategy="target_return",
         max_weight=None,
         risk_free_rate=0.04,
-        target_return=3.0,
+        target_return=0.1,
     )
 
-    assert result.expected_return == pytest.approx(3.0, abs=TOLERANCE)
-    assert "Target return: at least 300%." in result.assumptions
+    assert result.expected_return == pytest.approx(0.1, abs=TOLERANCE)
+    assert "Target return: at least 10%." in result.assumptions
 
 
 def test_run_rejects_an_unknown_strategy_and_lists_the_names():
@@ -227,13 +214,19 @@ def test_run_rejects_an_unknown_strategy_and_lists_the_names():
     [(5, 1, 5), (2, 3, 6)],
     ids=["the minimum decides", "the minimum per stock decides"],
 )
-def test_run_rejects_too_few_returns(min_observations, min_observations_per_stock, required):
+# The market index is added only once, and the minimum counts only the selected stocks.
+@pytest.mark.parametrize(
+    "tickers",
+    [["AAA", "BBB"], ["AAA", MARKET_TICKER]],
+    ids=["two stocks", "with the market index"],
+)
+def test_run_rejects_too_few_returns(min_observations, min_observations_per_stock, required, tickers):
     # The batch has three returns for two stocks.
     service = _service(FakeReader(_two_stock_batch()), min_observations, min_observations_per_stock)
 
     with pytest.raises(InsufficientHistoryError, match=f"only 3 trading days .* at least {required}:"):
         service.run(
-            ["AAA", "BBB"],
+            tickers,
             date(2026, 9, 1),
             date(2026, 9, 4),
             strategy="min_variance",
