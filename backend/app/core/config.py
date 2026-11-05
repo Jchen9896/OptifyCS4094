@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # the minimum, or the minimum per stock x the number of stocks (Decision 005, "Minimum history").
     min_return_observations: int = 60
     min_return_observations_per_stock: int = 10
+    # The U.S. equity risk premium that Kroll recommends, for the Black–Litterman prior (Decision 009).
+    equity_risk_premium: float = 0.05
+    # The market index for the Black–Litterman prior: the S&P 500 ETF (Decision 009).
+    market_proxy_ticker: str = "SPY"
+    # The uncertainty of the Black–Litterman prior, from He and Litterman, 1999 (Decision 009).
+    black_litterman_tau: float = 0.05
     portfolio_chart_initial_capital: float = 100_000.0
     # Yahoo symbols use letters, digits, and ".", "-", "^", "=" (for example BRK-B, RY.TO).
     ticker_pattern: str = r"[A-Z0-9.\-^=]{1,15}"
