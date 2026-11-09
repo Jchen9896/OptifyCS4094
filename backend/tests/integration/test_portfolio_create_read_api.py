@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.routes.portfolios import get_portfolio_service
 from app.core.db import Base, get_db
+from app.core.current_user import get_current_user_id
 from app.core.errors import MarketDataUnavailableError
 from app.main import create_app
 from app.market_data.base import StockInfo
@@ -54,6 +55,13 @@ def api():
 
     app = create_app()
     app.dependency_overrides[get_db] = database
+    outsider_id = uuid.uuid4()
+    def authenticated_user(authorization: str = ""):
+        return outsider_id if authorization == "Bearer outsider" else uuid.UUID(user_id)
+    from fastapi import Header
+    def current_user(authorization: str = Header(default="")):
+        return authenticated_user(authorization)
+    app.dependency_overrides[get_current_user_id] = current_user
 
     def service(db):
         return PortfolioService(PortfolioRepository(db), stock_service=Tickers(), stock_repository=StockRepository(db))
@@ -66,7 +74,7 @@ def api():
 
     app.dependency_overrides[get_portfolio_service] = get_service
     with TestClient(app) as client:
-        yield client, {"user_id": user_id}, engine
+        yield client, {"Authorization": "Bearer owner"}, engine
     engine.dispose()
 
 
@@ -80,40 +88,37 @@ def payload(name="Core"):
 
 def test_create_list_and_detail_survive_separate_requests(api):
     client, owner, _engine = api
-    response = client.post("/api/portfolios", params=owner, json=payload(" Core "))
+    response = client.post("/api/portfolios", headers=owner, json=payload(" Core "))
     assert response.status_code == 201
     saved = response.json()
     assert saved["name"] == "Core"
     assert saved["holdings"][0] == {"symbol": "AAPL", "name": "Apple Inc.", "quantity": "10.5"}
     assert saved["setup"] == payload()["setup"]
-    read = client.get(f'/api/portfolios/{saved["id"]}', params=owner)
+    read = client.get(f'/api/portfolios/{saved["id"]}', headers=owner)
     assert read.status_code == 200
     assert read.json()["setup"] == saved["setup"]
     assert float(read.json()["holdings"][0]["quantity"]) == 10.5
-    listing = client.get("/api/portfolios", params=owner)
+    listing = client.get("/api/portfolios", headers=owner)
     assert listing.status_code == 200
     assert [row["id"] for row in listing.json()] == [saved["id"]]
-    outsider = {"user_id": str(uuid.uuid4())}
-    assert client.get("/api/portfolios", params=outsider).json() == []
-    hidden = client.get(f'/api/portfolios/{saved["id"]}', params=outsider)
-    missing = client.get(f"/api/portfolios/{uuid.uuid4()}", params=owner)
+    outsider = {"Authorization": "Bearer outsider"}
+    assert client.get("/api/portfolios", headers=outsider).json() == []
+    hidden = client.get(f'/api/portfolios/{saved["id"]}', headers=outsider)
+    missing = client.get(f"/api/portfolios/{uuid.uuid4()}", headers=owner)
     assert hidden.status_code == missing.status_code == 404
     assert hidden.json() == missing.json()
 
 
 def test_create_errors_and_rollback(api):
     client, owner, engine = api
-    assert client.post("/api/portfolios", params=owner, json=payload()).status_code == 201
-    duplicate = client.post("/api/portfolios", params=owner, json=payload())
+    assert client.post("/api/portfolios", headers=owner, json=payload()).status_code == 201
+    duplicate = client.post("/api/portfolios", headers=owner, json=payload())
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"]["code"] == "duplicate_portfolio_name"
-    blank = client.post("/api/portfolios", params=owner, json={"name": "  "})
+    blank = client.post("/api/portfolios", headers=owner, json={"name": "  "})
     assert blank.status_code == 422
     assert blank.json()["detail"]["code"] == "invalid_portfolio_name"
-    unknown = client.post("/api/portfolios", params={"user_id": str(uuid.uuid4())}, json={"name": "Other"})
-    assert unknown.status_code == 404
-    assert unknown.json()["detail"]["code"] == "portfolio_user_not_found"
-    failure = client.post("/api/portfolios", params=owner, json={"name": "Broken", "holdings": [{"symbol": "FAIL", "quantity": 1}]})
+    failure = client.post("/api/portfolios", headers=owner, json={"name": "Broken", "holdings": [{"symbol": "FAIL", "quantity": 1}]})
     assert failure.status_code == 503
     assert failure.json()["detail"]["code"] == "market_data_unavailable"
     with Session(engine) as session:
@@ -121,18 +126,12 @@ def test_create_errors_and_rollback(api):
         assert len(session.scalars(select(Stock)).all()) == 1
 
 
-@pytest.mark.parametrize("params", [{}, {"user_id": "bad"}])
-def test_create_requires_valid_owner_uuid(api, params):
-    client, _owner, _engine = api
-    assert client.post("/api/portfolios", params=params, json={"name": "Core"}).status_code == 422
-
-
 def test_invalid_payload_and_missing_setup(api):
     client, owner, _engine = api
     bad = payload()
     bad["holdings"][0]["quantity"] = "0.0000001"
-    assert client.post("/api/portfolios", params=owner, json=bad).status_code == 422
-    saved = client.post("/api/portfolios", params=owner, json={"name": "Empty"})
+    assert client.post("/api/portfolios", headers=owner, json=bad).status_code == 422
+    saved = client.post("/api/portfolios", headers=owner, json={"name": "Empty"})
     assert saved.status_code == 201
     assert saved.json()["setup"] is None
     assert saved.json()["holdings"] == []
@@ -146,10 +145,10 @@ def test_save_and_read_keep_current_strategy_names(api, strategy, expected):
     client, owner, _engine = api
     body = payload()
     body["setup"]["strategy"] = strategy
-    created = client.post("/api/portfolios", params=owner, json=body)
+    created = client.post("/api/portfolios", headers=owner, json=body)
     assert created.status_code == 201
     assert created.json()["setup"]["strategy"] == expected
     saved_id = created.json()["id"]
-    read = client.get(f"/api/portfolios/{saved_id}", params=owner)
+    read = client.get(f"/api/portfolios/{saved_id}", headers=owner)
     assert read.status_code == 200
     assert read.json()["setup"]["strategy"] == expected

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.current_user import get_current_user_id
 from app.schemas.portfolio import (
     PortfolioCreateRequest, PortfolioDetailResponse, PortfolioResponse, PortfolioUpdateRequest,
 )
@@ -20,7 +21,8 @@ def get_portfolio_service(db: Session = Depends(get_db)) -> PortfolioService:
 
 @router.post("", response_model=PortfolioDetailResponse, status_code=201)
 def create_portfolio(
-    body: PortfolioCreateRequest, user_id: uuid.UUID,
+    body: PortfolioCreateRequest,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     service: PortfolioService = Depends(get_portfolio_service),
 ) -> PortfolioDetailResponse:
     """Save a new portfolio for an existing user."""
@@ -29,14 +31,16 @@ def create_portfolio(
 
 @router.get("", response_model=list[PortfolioResponse])
 def list_portfolios(
-    user_id: uuid.UUID, service: PortfolioService = Depends(get_portfolio_service),
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    service: PortfolioService = Depends(get_portfolio_service),
 ) -> list[PortfolioResponse]:
     return [PortfolioResponse.model_validate(row) for row in service.list_portfolios(user_id)]
 
 
 @router.get("/{portfolio_id}", response_model=PortfolioDetailResponse)
 def read_portfolio(
-    portfolio_id: uuid.UUID, user_id: uuid.UUID,
+    portfolio_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     service: PortfolioService = Depends(get_portfolio_service),
 ) -> PortfolioDetailResponse:
     """Read one portfolio. A wrong owner gets the same 404 as a missing row."""
@@ -47,7 +51,7 @@ def read_portfolio(
 def update_portfolio(
     portfolio_id: uuid.UUID,
     body: PortfolioUpdateRequest,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     service: PortfolioService = Depends(get_portfolio_service),
 ) -> PortfolioResponse:
     """Rename a portfolio. `user_id` must own the portfolio."""
@@ -58,7 +62,7 @@ def update_portfolio(
 @router.delete("/{portfolio_id}", status_code=204)
 def delete_portfolio(
     portfolio_id: uuid.UUID,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     service: PortfolioService = Depends(get_portfolio_service),
 ) -> Response:
     """Delete a portfolio. `user_id` must own the portfolio."""
