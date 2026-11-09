@@ -25,7 +25,9 @@ services:
     environment:
       # Inside Compose, the DB hostname is the service name `db`, not localhost.
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-optify}:${POSTGRES_PASSWORD:-optify}@db:5432/${POSTGRES_DB:-optify}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080}
+      CLERK_ISSUER: ${CLERK_ISSUER:-}
+      CLERK_JWT_KEY: ${CLERK_JWT_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +40,8 @@ services:
     profiles: ["demo"]
     build:
       context: ./frontend
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
     container_name: optify-frontend
     ports:
       - "${FRONTEND_PORT:-8080}:80"

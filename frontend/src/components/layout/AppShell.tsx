@@ -10,6 +10,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useClerk, useUser } from '@clerk/react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Breadcrumb,
@@ -40,6 +41,8 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function AppShell() {
   const location = useLocation()
+  const { user } = useUser()
+  const { signOut } = useClerk()
   const [section, page] = crumbFor(location.pathname)
 
   return (
@@ -109,19 +112,19 @@ export default function AppShell() {
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-sidebar-foreground">Retail investor</p>
+              <p className="truncate text-sm font-medium text-sidebar-foreground">{user?.primaryEmailAddress?.emailAddress ?? 'Guest'}</p>
               <p className="truncate text-xs text-sidebar-foreground/55">Sample portfolio</p>
             </div>
-            <Button
+            {user ? <Button
               variant="ghost"
               size="icon-sm"
+              onClick={() => void signOut()}
               className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              asChild
             >
-              <NavLink to="/login" aria-label="Sign out">
+              <span aria-label="Sign out">
                 <LogOut className="size-4" />
-              </NavLink>
-            </Button>
+              </span>
+            </Button> : <NavLink to="/login" className="text-sm underline">Sign in</NavLink>}
           </div>
         </div>
       </aside>

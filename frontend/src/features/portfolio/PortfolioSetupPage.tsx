@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useAuth } from '@clerk/react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -57,6 +58,7 @@ function defaultStartDate(): string {
 
 export default function PortfolioSetupPage() {
   const navigate = useNavigate()
+  const { userId } = useAuth()
   const [portfolioName, setPortfolioName] = useState('Sample portfolio')
   const [initialPortfolioValue, setInitialPortfolioValue] = useState(String(DEFAULT_SETUP.initialCapital))
   const [strategy, setStrategy] = useState(DEFAULT_SETUP.strategy)
@@ -152,7 +154,7 @@ export default function PortfolioSetupPage() {
         portfolioName,
         referencePrices,
         initialCapital: initialValue,
-      })
+      }, userId)
       navigate('/')
     } catch (caught) {
       setRunError(
