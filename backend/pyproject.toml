@@ -15,6 +15,7 @@ dependencies = [
     "yfinance>=0.2.61",
     "pytest>=8.3.0",
     "pydantic>=2.7",
+    "PyJWT[crypto]>=2.10,<3",
     "numpy>=2.0",
     "cvxpy>=1.5",
 ]
