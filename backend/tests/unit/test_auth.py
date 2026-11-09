@@ -33,6 +33,10 @@ def test_clerk_session_verification():
 
     assert verify({}).subject == "user_123"
     assert verify({}).email == "person@example.com"
+    without_origin = claims.copy()
+    del without_origin["azp"]
+    token = jwt.encode(without_origin, key, algorithm="RS256")
+    assert get_clerk_identity(HTTPAuthorizationCredentials(scheme="Bearer", credentials=token), settings).subject == "user_123"
     other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     for changes, signing_key in [
         ({"exp": now - timedelta(seconds=1)}, key),

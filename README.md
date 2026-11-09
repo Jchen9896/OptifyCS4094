@@ -104,11 +104,28 @@ backend\.venv\Scripts\python scripts\check_db.py
 | --- | --- | --- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Database credentials | `optify` |
 | `DATABASE_URL` | Host-side SQLAlchemy URL (`localhost`) | `postgresql+psycopg2://optify:optify@localhost:5432/optify` |
-| `CORS_ORIGINS` | Allowed browser origins | `http://localhost:5173,http://127.0.0.1:5173` |
+| `CORS_ORIGINS` | Allowed browser origins | `http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080` |
 | `API_PORT` | Published FastAPI port | `8000` |
 | `FRONTEND_PORT` | Published demo frontend port | `8080` |
 
 Inside Compose, the API uses hostname `db` instead of `localhost`. Commit `.env.example` only. Keep `.env` local.
+
+### Local Clerk demo
+
+Use one root `.env` for both `npm run dev` and Docker Compose. Copy `.env.example` and fill in `VITE_CLERK_PUBLISHABLE_KEY` with Clerk's publishable key. Set `CLERK_ISSUER` to the Frontend API URL on Clerk's Domains page. Set `CLERK_JWT_KEY` to the full PEM public key from API Keys → Show JWT public key → PEM Public Key. Put the multiline PEM between single quotes in `.env`. The Clerk secret key is not used by this app.
+
+In the Clerk development dashboard, enable email/password with email verification and Google sign-in. Under Sessions → Customize session token, add `"email": "{{user.primary_email_address}}"` and save. This supplies the signed email used for the local user row.
+
+Start the demo and apply migrations from the repo root:
+
+```bash
+docker compose --profile demo up -d --build
+docker compose exec api alembic upgrade head
+```
+
+Open `http://localhost:8080`. Sign in, then save and load a portfolio on Portfolio setup. An empty portfolio is enough to check account storage. To run analysis, add at least two assets, load their historical prices, set weights to 100%, and use a positive initial value.
+
+Each teammate needs the same Clerk development instance and the same three public settings in their own ignored `.env`. Share the settings privately with the team. Each teammate runs the Compose and migration commands on their own computer.
 
 ## Save and load portfolios
 
@@ -118,8 +135,7 @@ Apply migrations after the portfolio feature is merged:
 docker compose exec api alembic upgrade head
 ```
 
-The setup page has Save, Find, and Load controls. Sign-in is not available yet.
-Enter an existing `users.id` UUID. The app does not create a user account here.
+The setup page has Save, Find, and Load controls. Sign-in creates a local user account when that account first uses a saved portfolio.
 Save creates a new portfolio; a name must be unique for that user. Load restores
 the saved allocation, quantities, dates, prices, and analysis settings. Load
 prices before saving a portfolio with assets. An empty portfolio can also be saved.
