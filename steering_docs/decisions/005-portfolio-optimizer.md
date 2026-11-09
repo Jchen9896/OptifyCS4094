@@ -9,6 +9,8 @@ Calculate portfolio weights with a subclass of `OptimizationStrategy` in `backen
 | `TargetReturnStrategy` | `target_return` | The lowest risk with an expected return of at least the target |
 | `TargetRiskStrategy` | `target_risk` | The highest expected return with a volatility of at most the target |
 
+The strategies get Black–Litterman expected returns from `OptimizationService`, not the historical mean returns (Decision 009).
+
 ## Rules
 
 - `validate_optimizer_input` checks the inputs before a strategy gets them. A strategy does not check them again. A strategy checks only the conditions that are specific to it, for example `check_can_beat_risk_free_rate` in max Sharpe, or a missing target.
