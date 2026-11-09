@@ -40,10 +40,19 @@ cp .env.example .env
 
 On PowerShell: `Copy-Item .env.example .env`.
 
+Fill in the three Clerk values in the root `.env`:
+
+- `VITE_CLERK_PUBLISHABLE_KEY` is the publishable key from Clerk API Keys.
+- `CLERK_ISSUER` is the Frontend API URL from Clerk Domains.
+- `CLERK_JWT_KEY` is the full PEM public key from API Keys → Show JWT public key → PEM Public Key. Put the multiline key between single quotes.
+
+In the Clerk development dashboard, enable email/password with email verification and Google sign-in. Under Configure → Sessions → Customize session token, set the Claims JSON to `{ "email": "{{user.primary_email_address}}" }` and save. The Clerk secret key is not used. Teammates can use the same three public values in their own ignored root `.env`.
+
 **2. Start PostgreSQL and FastAPI**
 
 ```bash
 docker compose up -d --build
+docker compose exec api alembic upgrade head
 ```
 
 This starts `optify-db` and `optify-api`. Database files persist in the `optify_pgdata` volume.
@@ -76,7 +85,7 @@ When you want the frontend in Compose too (demos / deployment-style run):
 docker compose --profile demo up -d --build
 ```
 
-Then open http://localhost:8080. Day-to-day UI work should still use Vite on the host for faster hot reload.
+Then open http://localhost:8080. Day-to-day UI work should still use Vite on the host for faster hot reload. Both paths read the same root `.env`.
 
 ### Optional: host Python venv
 
@@ -110,35 +119,14 @@ backend\.venv\Scripts\python scripts\check_db.py
 
 Inside Compose, the API uses hostname `db` instead of `localhost`. Commit `.env.example` only. Keep `.env` local.
 
-### Local Clerk demo
-
-Use one root `.env` for both `npm run dev` and Docker Compose. Copy `.env.example` and fill in `VITE_CLERK_PUBLISHABLE_KEY` with Clerk's publishable key. Set `CLERK_ISSUER` to the Frontend API URL on Clerk's Domains page. Set `CLERK_JWT_KEY` to the full PEM public key from API Keys → Show JWT public key → PEM Public Key. Put the multiline PEM between single quotes in `.env`. The Clerk secret key is not used by this app.
-
-In the Clerk development dashboard, enable email/password with email verification and Google sign-in. Under Sessions → Customize session token, add `"email": "{{user.primary_email_address}}"` and save. This supplies the signed email used for the local user row.
-
-Start the demo and apply migrations from the repo root:
-
-```bash
-docker compose --profile demo up -d --build
-docker compose exec api alembic upgrade head
-```
-
-Open `http://localhost:8080`. Sign in, then save and load a portfolio on Portfolio setup. An empty portfolio is enough to check account storage. To run analysis, add at least two assets, load their historical prices, set weights to 100%, and use a positive initial value.
-
-Each teammate needs the same Clerk development instance and the same three public settings in their own ignored `.env`. Share the settings privately with the team. Each teammate runs the Compose and migration commands on their own computer.
-
 ## Save and load portfolios
-
-Apply migrations after the portfolio feature is merged:
-
-```bash
-docker compose exec api alembic upgrade head
-```
 
 The setup page has Save, Find, and Load controls. Sign-in creates a local user account when that account first uses a saved portfolio.
 Save creates a new portfolio; a name must be unique for that user. Load restores
 the saved allocation, quantities, dates, prices, and analysis settings. Load
 prices before saving a portfolio with assets. An empty portfolio can also be saved.
+
+To run analysis, add at least two assets, load their historical prices, set weights to 100%, and use a positive initial value. With two assets, set the maximum weight to at least 50%.
 
 Create new portfolio clears the setup form. It does not delete saved portfolios.
 Portfolios saved without setup inputs are still readable through the API.
