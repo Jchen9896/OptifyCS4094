@@ -27,6 +27,7 @@ function crumbFor(pathname: string): [string, string] {
   if (pathname.startsWith('/setup')) return ['Portfolio', 'Portfolio setup']
   if (pathname.startsWith('/compare')) return ['Portfolio', 'Compare portfolios']
   if (pathname.startsWith('/login')) return ['Account', 'Sign in']
+  if (pathname.startsWith('/learn')) return ['Learn', 'How Optify works']
   return ['Portfolio', 'Dashboard']
 }
 
@@ -87,10 +88,10 @@ export default function AppShell() {
           Learn
         </p>
         <nav className="flex flex-col gap-1">
-          <span className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/55">
+          <NavLink to="/learn" className={navLinkClass}>
             <BookOpen className="size-4" />
-            Learn
-          </span>
+            How Optify works
+          </NavLink>
         </nav>
 
         <div className="mt-auto flex flex-col gap-1 border-t border-sidebar-border pt-4">
