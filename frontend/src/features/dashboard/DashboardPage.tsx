@@ -1,8 +1,6 @@
 import { useMemo } from 'react'
 import { useAuth } from '@clerk/react'
-import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -20,6 +18,8 @@ import {
 } from '@/components/ui/table'
 import { formatPercent, formatWeight } from '@/lib/formatters.ts'
 import { loadLastOptimizationRun } from '../optimization/optimizationApi.ts'
+import { useActivePortfolio } from '../portfolio/ActivePortfolioContext.tsx'
+import PortfolioSwitcher from '../portfolio/components/PortfolioSwitcher.tsx'
 import PortfolioPerformanceCharts from './PortfolioPerformanceCharts.tsx'
 
 function formatMetric(value: number | undefined, asPercent: boolean): string {
@@ -50,36 +50,36 @@ function formatShares(value: number | null): string {
 
 export default function DashboardPage() {
   const { userId } = useAuth()
-  const run = useMemo(() => loadLastOptimizationRun(userId), [userId])
+  const { activeId, activeLabel } = useActivePortfolio()
+  const run = useMemo(() => loadLastOptimizationRun(userId, activeId), [userId, activeId])
 
   if (!run) {
     return (
       <div className="mx-auto max-w-6xl space-y-6">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold">Portfolio optimization overview</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            No live optimization run yet. Set up a portfolio, load prices, and run analysis.
-          </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h1 className="font-heading text-2xl font-semibold">Portfolio optimization overview</h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              No optimization results for {activeLabel} in this browser session yet. Open setup to
+              run analysis for this portfolio.
+            </p>
+          </div>
+          <PortfolioSwitcher />
         </div>
         <Card>
           <CardHeader>
             <CardTitle>Get started</CardTitle>
             <CardDescription>
-              The dashboard shows weights and risk metrics from your last run in this browser
-              session.
+              Switching portfolios here only changes the dashboard view. Use Open portfolio setup to
+              edit holdings and run analysis.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <Link to="/setup">Go to portfolio setup</Link>
-            </Button>
-          </CardContent>
         </Card>
       </div>
     )
   }
 
-  const { result, holdings, portfolioName, referencePrices = {}, initialCapital } = run
+  const { result, holdings, portfolioName, referencePrices = {}, initialCapital, saveNote } = run
   const capital = initialCapital ?? result.initial_capital
   const names = Object.fromEntries(holdings.map((holding) => [holding.symbol, holding.name]))
   const currentBySymbol = Object.fromEntries(
@@ -116,10 +116,9 @@ export default function DashboardPage() {
             Estimate · {portfolioName} · {result.period_start} – {result.period_end} ·{' '}
             {result.strategy}
           </p>
+          {saveNote && <p className="mt-2 text-sm text-muted-foreground">{saveNote}</p>}
         </div>
-        <Button asChild>
-          <Link to="/setup">Edit portfolio setup</Link>
-        </Button>
+        <PortfolioSwitcher />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -10,6 +10,8 @@ export type OptimizationRequest = {
   riskFreeRate: number | null
   currentWeights: number[]
   initialCapital: number | null
+  targetReturn?: number | null
+  targetVolatility?: number | null
 }
 
 export type EquityCurvePoint = {
@@ -64,6 +66,8 @@ export async function runOptimization(
       risk_free_rate: request.riskFreeRate,
       current_weights: request.currentWeights,
       initial_capital: request.initialCapital,
+      target_return: request.targetReturn ?? null,
+      target_volatility: request.targetVolatility ?? null,
     }),
   })
 }
@@ -97,4 +101,76 @@ export function clearLastOptimizationRun(
   portfolioId: string | null = null,
 ): void {
   sessionStorage.removeItem(lastRunKey(userId, portfolioId))
+}
+
+export type OptimizationRunParams = {
+  tickers: string[]
+  start_date: string
+  end_date: string
+  strategy: string
+  max_weight: number | null
+  risk_free_rate: number | null
+  target_return?: number | null
+  target_volatility?: number | null
+  initial_capital: number | null
+  current_weights: number[] | null
+}
+
+export type OptimizationRunSummary = {
+  id: string
+  portfolio_id: string
+  strategy: string
+  period_start: string
+  period_end: string
+  expected_return: number
+  volatility: number
+  sharpe_ratio: number
+  created_at: string
+}
+
+export type OptimizationRunDetail = {
+  id: string
+  portfolio_id: string
+  params: OptimizationRunParams
+  result: OptimizationResult
+  created_at: string
+}
+
+export async function saveOptimizationRun(
+  portfolioId: string,
+  params: OptimizationRunParams,
+  result: OptimizationResult,
+  token: string,
+): Promise<OptimizationRunDetail> {
+  return fetchJson(`/api/portfolios/${encodeURIComponent(portfolioId)}/optimization-runs`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ params, result }),
+  })
+}
+
+export async function listOptimizationRuns(
+  portfolioId: string,
+  token: string,
+  limit = 20,
+): Promise<OptimizationRunSummary[]> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  return fetchJson(
+    `/api/portfolios/${encodeURIComponent(portfolioId)}/optimization-runs?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+}
+
+export async function readOptimizationRun(
+  portfolioId: string,
+  runId: string,
+  token: string,
+): Promise<OptimizationRunDetail> {
+  return fetchJson(
+    `/api/portfolios/${encodeURIComponent(portfolioId)}/optimization-runs/${encodeURIComponent(runId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
 }

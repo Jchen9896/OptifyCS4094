@@ -1,3 +1,16 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@clerk/react'
+import { Link } from 'react-router-dom'
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  Scatter,
+  ScatterChart,
+  XAxis,
+  YAxis,
+  ZAxis,
+} from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -8,6 +21,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
 import { Field, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -24,55 +45,309 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ApiError } from '@/lib/apiClient'
+import { formatPercent, formatWeight } from '@/lib/formatters.ts'
+import {
+  listOptimizationRuns,
+  readOptimizationRun,
+  type OptimizationRunDetail,
+  type OptimizationRunSummary,
+} from '../optimization/optimizationApi.ts'
+import { useActivePortfolio } from '../portfolio/ActivePortfolioContext.tsx'
 
-const metrics = [
-  {
-    label: 'Annualized return',
-    explanation: 'Average yearly return over the shared historical period',
-    a: '7.1%',
-    b: '8.4%',
-    diff: '+1.3 pp',
-  },
-  {
-    label: 'Annualized volatility',
-    explanation: 'Risk measured as yearly standard deviation of returns',
-    a: '14.2%',
-    b: '12.6%',
-    diff: '−1.6 pp',
-  },
-  {
-    label: 'Sharpe ratio',
-    explanation: 'Return per unit of risk after the risk-free rate',
-    a: '0.22',
-    b: '0.31',
-    diff: '+0.09',
-  },
-]
+const equityConfig = {
+  a: { label: 'Run A', color: 'var(--chart-2)' },
+  b: { label: 'Run B', color: 'var(--chart-1)' },
+} satisfies ChartConfig
 
-const weights = [
-  { symbol: 'AAPL', a: '30%', b: '24%', diff: '−6 pp' },
-  { symbol: 'MSFT', a: '22%', b: '20%', diff: '−2 pp' },
-  { symbol: 'VTI', a: '35%', b: '41%', diff: '+6 pp' },
-  { symbol: 'AGG', a: '13%', b: '15%', diff: '+2 pp' },
-]
+const riskConfig = {
+  a: { label: 'Run A', color: 'var(--chart-2)' },
+  b: { label: 'Run B', color: 'var(--chart-1)' },
+} satisfies ChartConfig
+
+function formatMetric(value: number | undefined, asPercent: boolean): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+  return asPercent ? formatPercent(value) : value.toFixed(2)
+}
+
+function formatDelta(a: number | undefined, b: number | undefined, asPercent: boolean): string {
+  if (
+    typeof a !== 'number' ||
+    typeof b !== 'number' ||
+    !Number.isFinite(a) ||
+    !Number.isFinite(b)
+  ) {
+    return '—'
+  }
+  const delta = b - a
+  const sign = delta > 0 ? '+' : ''
+  return asPercent ? `${sign}${(delta * 100).toFixed(2)} pp` : `${sign}${delta.toFixed(2)}`
+}
+
+function formatRunLabel(run: OptimizationRunSummary): string {
+  const when = new Date(run.created_at).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `${when} · ${run.strategy} · ${run.period_start} → ${run.period_end}`
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value)
+}
 
 export default function ComparePage() {
+  const { getToken } = useAuth()
+  const { portfolios, activeId } = useActivePortfolio()
+  const [portfolioA, setPortfolioA] = useState<string>('')
+  const [portfolioB, setPortfolioB] = useState<string>('')
+  const [runsA, setRunsA] = useState<OptimizationRunSummary[]>([])
+  const [runsB, setRunsB] = useState<OptimizationRunSummary[]>([])
+  const [runIdA, setRunIdA] = useState<string>('')
+  const [runIdB, setRunIdB] = useState<string>('')
+  const [detailA, setDetailA] = useState<OptimizationRunDetail | null>(null)
+  const [detailB, setDetailB] = useState<OptimizationRunDetail | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const token = useCallback(async () => {
+    const value = await getToken()
+    if (!value) throw new Error('Sign in to compare saved runs.')
+    return value
+  }, [getToken])
+
+  useEffect(() => {
+    if (!portfolios.length) {
+      setPortfolioA('')
+      setPortfolioB('')
+      return
+    }
+    const preferred = activeId && portfolios.some((row) => row.id === activeId)
+      ? activeId
+      : portfolios[0].id
+    setPortfolioA((current) => current || preferred)
+    setPortfolioB((current) => current || preferred)
+  }, [portfolios, activeId])
+
+  useEffect(() => {
+    if (!portfolioA) {
+      setRunsA([])
+      setRunIdA('')
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const rows = await listOptimizationRuns(portfolioA, await token())
+        if (cancelled) return
+        setRunsA(rows)
+        setRunIdA((current) =>
+          current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? '',
+        )
+      } catch (caught) {
+        if (!cancelled) {
+          setRunsA([])
+          setRunIdA('')
+          setError(
+            caught instanceof ApiError
+              ? `${caught.code}: ${caught.message}`
+              : caught instanceof Error
+                ? caught.message
+                : 'Could not load runs for portfolio A.',
+          )
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [portfolioA, token])
+
+  useEffect(() => {
+    if (!portfolioB) {
+      setRunsB([])
+      setRunIdB('')
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const rows = await listOptimizationRuns(portfolioB, await token())
+        if (cancelled) return
+        setRunsB(rows)
+        setRunIdB((current) => {
+          if (current && rows.some((row) => row.id === current)) return current
+          if (portfolioA === portfolioB && rows.length > 1) return rows[1].id
+          return rows[0]?.id ?? ''
+        })
+      } catch (caught) {
+        if (!cancelled) {
+          setRunsB([])
+          setRunIdB('')
+          setError(
+            caught instanceof ApiError
+              ? `${caught.code}: ${caught.message}`
+              : caught instanceof Error
+                ? caught.message
+                : 'Could not load runs for portfolio B.',
+          )
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [portfolioB, portfolioA, token])
+
+  useEffect(() => {
+    if (!portfolioA || !runIdA || !portfolioB || !runIdB) {
+      setDetailA(null)
+      setDetailB(null)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const auth = await token()
+        const [a, b] = await Promise.all([
+          readOptimizationRun(portfolioA, runIdA, auth),
+          readOptimizationRun(portfolioB, runIdB, auth),
+        ])
+        if (cancelled) return
+        setDetailA(a)
+        setDetailB(b)
+      } catch (caught) {
+        if (!cancelled) {
+          setDetailA(null)
+          setDetailB(null)
+          setError(
+            caught instanceof ApiError
+              ? `${caught.code}: ${caught.message}`
+              : caught instanceof Error
+                ? caught.message
+                : 'Could not load the selected runs.',
+          )
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [portfolioA, runIdA, portfolioB, runIdB, token])
+
+  const periodAligned = Boolean(
+    detailA &&
+      detailB &&
+      detailA.result.period_start === detailB.result.period_start &&
+      detailA.result.period_end === detailB.result.period_end,
+  )
+
+  const metrics = useMemo(() => {
+    if (!detailA || !detailB) return []
+    return [
+      {
+        label: 'Annualized return',
+        explanation: 'Expected yearly return from the stored optimization result',
+        a: detailA.result.expected_return,
+        b: detailB.result.expected_return,
+        asPercent: true,
+      },
+      {
+        label: 'Annualized volatility',
+        explanation: 'Yearly standard deviation of returns from the stored result',
+        a: detailA.result.volatility,
+        b: detailB.result.volatility,
+        asPercent: true,
+      },
+      {
+        label: 'Sharpe ratio',
+        explanation: 'Return per unit of risk after the risk-free rate',
+        a: detailA.result.sharpe_ratio,
+        b: detailB.result.sharpe_ratio,
+        asPercent: false,
+      },
+    ]
+  }, [detailA, detailB])
+
+  const weightRows = useMemo(() => {
+    if (!detailA || !detailB) return []
+    const symbols = Array.from(
+      new Set([...Object.keys(detailA.result.weights), ...Object.keys(detailB.result.weights)]),
+    ).sort()
+    return symbols.map((symbol) => ({
+      symbol,
+      a: detailA.result.weights[symbol] ?? 0,
+      b: detailB.result.weights[symbol] ?? 0,
+    }))
+  }, [detailA, detailB])
+
+  const equityData = useMemo(() => {
+    if (!detailA || !detailB || !periodAligned) return []
+    const byDate = new Map<string, { date: string; a?: number; b?: number }>()
+    for (const point of detailA.result.equity_curve) {
+      byDate.set(point.date, { date: point.date, a: point.optimized_value })
+    }
+    for (const point of detailB.result.equity_curve) {
+      const row = byDate.get(point.date) ?? { date: point.date }
+      row.b = point.optimized_value
+      byDate.set(point.date, row)
+    }
+    return Array.from(byDate.values()).sort((left, right) => left.date.localeCompare(right.date))
+  }, [detailA, detailB, periodAligned])
+
+  const riskPoints = useMemo(() => {
+    if (!detailA || !detailB) return { a: [], b: [] }
+    return {
+      a: [{ x: detailA.result.volatility * 100, y: detailA.result.expected_return * 100 }],
+      b: [{ x: detailB.result.volatility * 100, y: detailB.result.expected_return * 100 }],
+    }
+  }, [detailA, detailB])
+
+  const portfolioName = (id: string) => portfolios.find((row) => row.id === id)?.name ?? 'Portfolio'
+
+  if (!portfolios.length) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Save a portfolio and run analysis first. Compare uses persisted optimization runs.
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/setup">Open portfolio setup</Link>
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Place two portfolio versions side by side using the same historical period and
-            assumptions.
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Illustrative sample · Shared period 13 Oct 2025 – 12 Oct 2026
+            Place two saved optimization runs side by side. Prefer runs that share the same
+            historical period.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button>Refine blueprint</Button>
-          <Button>Run analysis</Button>
+          <Button asChild variant="outline">
+            <Link to="/setup">Refine blueprint</Link>
+          </Button>
+          <Button asChild>
+            <Link to="/setup">Run analysis</Link>
+          </Button>
         </div>
       </div>
 
@@ -81,163 +356,300 @@ export default function ComparePage() {
           <div className="grid gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel>Portfolio A</FieldLabel>
-              <Select defaultValue="current">
+              <Select value={portfolioA} onValueChange={setPortfolioA}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue placeholder="Select portfolio" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="current">Sample portfolio — current</SelectItem>
+                  {portfolios.map((row) => (
+                    <SelectItem key={row.id} value={row.id}>
+                      {row.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
             <Field>
               <FieldLabel>Portfolio B</FieldLabel>
-              <Select defaultValue="optimized">
+              <Select value={portfolioB} onValueChange={setPortfolioB}>
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue placeholder="Select portfolio" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="optimized">Sample portfolio — optimized</SelectItem>
+                  {portfolios.map((row) => (
+                    <SelectItem key={row.id} value={row.id}>
+                      {row.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel>Run A</FieldLabel>
+              <Select value={runIdA} onValueChange={setRunIdA} disabled={!runsA.length}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={runsA.length ? 'Select run' : 'No saved runs'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {runsA.map((row) => (
+                    <SelectItem key={row.id} value={row.id}>
+                      {formatRunLabel(row)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel>Run B</FieldLabel>
+              <Select value={runIdB} onValueChange={setRunIdB} disabled={!runsB.length}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={runsB.length ? 'Select run' : 'No saved runs'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {runsB.map((row) => (
+                    <SelectItem key={row.id} value={row.id}>
+                      {formatRunLabel(row)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>
           </div>
-          <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Historical period</p>
-            <p className="mt-1">13 Oct 2025 → 12 Oct 2026 · Daily adjusted closes · Calendar XNYS</p>
-            <p className="mt-2 text-xs">
-              Data provenance: shared market data from stored price bars when available
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>Aligned metric comparison</CardTitle>
-              <CardDescription>Same period and assumptions for both portfolios</CardDescription>
+          {detailA && detailB ? (
+            <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Historical period</p>
+              {periodAligned ? (
+                <p className="mt-1">
+                  Shared period {detailA.result.period_start} → {detailA.result.period_end} · Daily
+                  adjusted closes
+                </p>
+              ) : (
+                <p className="mt-1 text-amber-700 dark:text-amber-400">
+                  Periods differ. Run A: {detailA.result.period_start} → {detailA.result.period_end}.
+                  Run B: {detailB.result.period_start} → {detailB.result.period_end}. Metrics stay
+                  side by side; equity overlay needs a shared period.
+                </p>
+              )}
+              <p className="mt-2 text-xs">
+                {portfolioName(portfolioA)} vs {portfolioName(portfolioB)} · Results from stored
+                optimization runs
+              </p>
             </div>
-            <Badge variant="secondary">Sample</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Metric</TableHead>
-                <TableHead>Current</TableHead>
-                <TableHead>Optimized</TableHead>
-                <TableHead>Difference</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {metrics.map((row) => (
-                <TableRow key={row.label}>
-                  <TableCell>
-                    <p className="font-medium">{row.label}</p>
-                    <p className="text-xs text-muted-foreground">{row.explanation}</p>
-                  </TableCell>
-                  <TableCell className="text-lg font-semibold">{row.a}</TableCell>
-                  <TableCell className="text-lg font-semibold">{row.b}</TableCell>
-                  <TableCell className="text-muted-foreground">{row.diff}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Positive differences favor the optimized blueprint in this sample.
-          </p>
+          ) : (
+            <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+              {loading
+                ? 'Loading selected runs…'
+                : 'Select two saved runs. Run analysis from setup to create history for a portfolio.'}
+            </div>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Historical risk-return profile</CardTitle>
-            <CardDescription>Current vs optimized markers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="relative h-64 rounded-md border border-dashed border-border bg-muted/40">
-              <div className="absolute inset-x-12 top-8 bottom-12 border-b border-l border-border">
-                <span className="absolute top-20 left-[62%] size-3 rounded-full bg-primary" />
-                <span className="absolute top-12 left-[45%] size-3 rounded-full bg-muted-foreground" />
+      {detailA && detailB && (
+        <>
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle>Aligned metric comparison</CardTitle>
+                  <CardDescription>
+                    Stored expected return, volatility, and Sharpe for each run
+                  </CardDescription>
+                </div>
+                <Badge variant="secondary">{periodAligned ? 'Shared period' : 'Mixed periods'}</Badge>
               </div>
-              <div className="absolute top-3 left-4 flex gap-4 text-xs text-muted-foreground">
-                <span>● Current</span>
-                <span>● Optimized</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Metric</TableHead>
+                    <TableHead>Run A</TableHead>
+                    <TableHead>Run B</TableHead>
+                    <TableHead>Difference (B − A)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {metrics.map((row) => (
+                    <TableRow key={row.label}>
+                      <TableCell>
+                        <p className="font-medium">{row.label}</p>
+                        <p className="text-xs text-muted-foreground">{row.explanation}</p>
+                      </TableCell>
+                      <TableCell className="text-lg font-semibold">
+                        {formatMetric(row.a, row.asPercent)}
+                      </TableCell>
+                      <TableCell className="text-lg font-semibold">
+                        {formatMetric(row.b, row.asPercent)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDelta(row.a, row.b, row.asPercent)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Historical performance</CardTitle>
-            <CardDescription>Cumulative growth placeholder</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="relative h-64 rounded-md border border-dashed border-border bg-muted/40">
-              <svg viewBox="0 0 320 160" className="h-full w-full p-4 text-foreground" aria-hidden>
-                <polyline
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  points="10,120 60,110 110,90 160,95 210,70 260,60 310,40"
-                />
-                <polyline
-                  fill="none"
-                  stroke="oklch(0.556 0 0)"
-                  strokeWidth="2"
-                  points="10,130 60,125 110,115 160,100 210,85 260,55 310,35"
-                />
-              </svg>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Historical risk-return profile</CardTitle>
+                <CardDescription>Volatility vs expected return markers</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={riskConfig} className="aspect-auto h-64 w-full">
+                  <ScatterChart margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
+                    <CartesianGrid />
+                    <XAxis
+                      type="number"
+                      dataKey="x"
+                      name="Volatility"
+                      unit="%"
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      type="number"
+                      dataKey="y"
+                      name="Return"
+                      unit="%"
+                      tickLine={false}
+                      axisLine={false}
+                      width={48}
+                    />
+                    <ZAxis range={[80, 80]} />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value, name) =>
+                            `${name === 'y' ? 'Return' : 'Volatility'}: ${Number(value).toFixed(2)}%`
+                          }
+                        />
+                      }
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Scatter name="a" data={riskPoints.a} fill="var(--color-a)" />
+                    <Scatter name="b" data={riskPoints.b} fill="var(--color-b)" />
+                  </ScatterChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Asset-level weights</CardTitle>
-          <CardDescription>How each holding differs between the two portfolios</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Portfolio A</TableHead>
-                <TableHead>Portfolio B</TableHead>
-                <TableHead>Difference</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {weights.map((row) => (
-                <TableRow key={row.symbol}>
-                  <TableCell className="font-medium">{row.symbol}</TableCell>
-                  <TableCell>{row.a}</TableCell>
-                  <TableCell>{row.b}</TableCell>
-                  <TableCell className="text-muted-foreground">{row.diff}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Historical performance</CardTitle>
+                <CardDescription>
+                  {periodAligned
+                    ? 'Optimized equity curves on the shared period'
+                    : 'Overlay available only when periods match'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {periodAligned && equityData.length ? (
+                  <ChartContainer config={equityConfig} className="aspect-auto h-64 w-full">
+                    <LineChart accessibilityLayer data={equityData} margin={{ left: 12, right: 12 }}>
+                      <CartesianGrid vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tickLine={false}
+                        axisLine={false}
+                        minTickGap={32}
+                        tickFormatter={(value: string) => value.slice(5)}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        width={72}
+                        tickFormatter={(value: number) => formatCurrency(value)}
+                      />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            labelFormatter={(value) => String(value)}
+                            formatter={(value) => formatCurrency(Number(value))}
+                          />
+                        }
+                      />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      <Line
+                        type="monotone"
+                        dataKey="a"
+                        stroke="var(--color-a)"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="b"
+                        stroke="var(--color-b)"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls
+                      />
+                    </LineChart>
+                  </ChartContainer>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Choose two runs with the same period start and end to overlay capital paths.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Asset-level weights</CardTitle>
+              <CardDescription>Optimized weights from each stored run</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Symbol</TableHead>
+                    <TableHead>Run A</TableHead>
+                    <TableHead>Run B</TableHead>
+                    <TableHead>Difference</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {weightRows.map((row) => (
+                    <TableRow key={row.symbol}>
+                      <TableCell className="font-medium">{row.symbol}</TableCell>
+                      <TableCell>{formatWeight(row.a)}</TableCell>
+                      <TableCell>{formatWeight(row.b)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDelta(row.a, row.b, true)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Card>
         <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>Refine results</CardTitle>
             <CardDescription className="mt-1">
-              Adjust the blueprint on Portfolio setup, then return here after analysis is connected.
+              Adjust the blueprint on Portfolio setup, run analysis again, then compare the new
+              saved run here.
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button>Refine blueprint</Button>
-            <Button disabled>Run analysis</Button>
+            <Button asChild variant="outline">
+              <Link to="/setup">Refine blueprint</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/setup">Run analysis</Link>
+            </Button>
           </div>
         </CardFooter>
       </Card>

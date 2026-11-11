@@ -46,6 +46,8 @@ function blankDraft(): PortfolioDraft {
     strategy: '',
     maxWeightPercent: 0,
     riskFreePercent: 0,
+    targetReturnPercent: null,
+    targetVolatilityPercent: null,
     holdings: [],
     referencePrices: {},
   }

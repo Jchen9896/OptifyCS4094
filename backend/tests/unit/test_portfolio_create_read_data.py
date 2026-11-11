@@ -124,9 +124,28 @@ def test_snapshot_keys_must_match_holdings():
 
 @pytest.mark.parametrize(("strategy", "expected"), [
     ("min_variance", "min_variance"), ("max_sharpe", "max_sharpe"),
+    ("target_return", "target_return"), ("target_risk", "target_risk"),
     ("minvar", "min_variance"), ("mvo", "min_variance"),
 ])
 def test_snapshot_uses_current_strategy_names_and_reads_old_aliases(strategy, expected):
     data = snapshot()
     data["strategy"] = strategy
+    if strategy == "target_return":
+        data["target_return"] = 0.08
+    if strategy == "target_risk":
+        data["target_volatility"] = 0.12
     assert PortfolioSetup(**data).strategy == expected
+
+
+def test_target_return_strategy_requires_a_target():
+    data = snapshot()
+    data["strategy"] = "target_return"
+    with pytest.raises(ValidationError, match="target return"):
+        PortfolioSetup(**data)
+
+
+def test_target_risk_strategy_requires_a_volatility():
+    data = snapshot()
+    data["strategy"] = "target_risk"
+    with pytest.raises(ValidationError, match="target volatility"):
+        PortfolioSetup(**data)
