@@ -42,7 +42,9 @@ export type StoredOptimizationRun = {
   initialCapital: number
 }
 
-const LAST_RUN_KEY = 'optify.lastOptimization'
+function lastRunKey(userId: string | null): string {
+  return `optify.lastOptimization.${userId ?? 'guest'}`
+}
 
 export async function runOptimization(
   request: OptimizationRequest,
@@ -63,12 +65,12 @@ export async function runOptimization(
   })
 }
 
-export function saveLastOptimizationRun(run: StoredOptimizationRun): void {
-  sessionStorage.setItem(LAST_RUN_KEY, JSON.stringify(run))
+export function saveLastOptimizationRun(run: StoredOptimizationRun, userId: string | null): void {
+  sessionStorage.setItem(lastRunKey(userId), JSON.stringify(run))
 }
 
-export function loadLastOptimizationRun(): StoredOptimizationRun | null {
-  const raw = sessionStorage.getItem(LAST_RUN_KEY)
+export function loadLastOptimizationRun(userId: string | null): StoredOptimizationRun | null {
+  const raw = sessionStorage.getItem(lastRunKey(userId))
   if (!raw) {
     return null
   }

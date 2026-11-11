@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """Runtime settings. Copy `.env.example` to `.env` and adjust locally."""
 
     database_url: str = "postgresql+psycopg2://optify:optify@localhost:5432/optify"
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
     clerk_issuer: str = ""
     clerk_jwt_key: str = ""
     market_data_interval: str = "1d"

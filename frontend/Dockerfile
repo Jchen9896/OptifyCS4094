@@ -9,6 +9,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+ARG VITE_CLERK_PUBLISHABLE_KEY
 RUN npm run build
 
 FROM nginx:alpine

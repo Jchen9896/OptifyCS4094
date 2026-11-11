@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useAuth } from '@clerk/react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,7 +49,8 @@ function formatShares(value: number | null): string {
 }
 
 export default function DashboardPage() {
-  const run = useMemo(() => loadLastOptimizationRun(), [])
+  const { userId } = useAuth()
+  const run = useMemo(() => loadLastOptimizationRun(userId), [userId])
 
   if (!run) {
     return (
