@@ -21,64 +21,75 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ApiError } from '@/lib/apiClient'
-import HistoryPeriodPanel from '../history-period/HistoryPeriodPanel.tsx'
 import { ensureHoldingsPrices } from '../history-period/historyApi.ts'
-import {
-  runOptimization,
-  saveLastOptimizationRun,
-  saveOptimizationRun,
-} from '../optimization/optimizationApi.ts'
 import StockSearch from '../stock-search/components/StockSearch.tsx'
 import type { StockSearchResult } from '../stock-search/stockApi.ts'
 import { useActivePortfolio } from './ActivePortfolioContext.tsx'
+import {
+  BROKERAGE_OPTIONS,
+  parseBrokeragePositionsCsv,
+  type BrokerageId,
+} from './brokerageImport.ts'
 import HoldingsTable from './components/HoldingsTable.tsx'
+import PortfolioSwitcher from './components/PortfolioSwitcher.tsx'
 import { createPortfolio, type PortfolioDraft } from './portfolioApi.ts'
 import {
   addHolding,
+  applyPricesToHoldings,
   removeHolding,
-  resyncQuantities,
   sumWeights,
   updateHoldingWeight,
   weightsAreComplete,
 } from './holdings.ts'
-import { parseSchwabPositionsCsv } from './schwabCsv.ts'
 import { TARGET_WEIGHT_TOTAL, type Holding } from './types.ts'
 
 const FIELD_HINTS = {
   portfolioName: 'Growth portfolio',
   initialCapital: '100000',
-  maxWeight: '45',
-  riskFree: '4',
-  strategy: 'Choose a strategy',
-  targetReturn: '8',
-  targetVolatility: '12',
 }
 
 function optionalNumberText(value: number): string {
   return value > 0 ? String(value) : ''
 }
 
+function isoDateUtc(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function defaultHistoryRange(): { startDate: string; endDate: string } {
+  const end = new Date()
+  end.setUTCDate(end.getUTCDate() - 1)
+  const start = new Date(end)
+  start.setUTCFullYear(start.getUTCFullYear() - 1)
+  return { startDate: isoDateUtc(start), endDate: isoDateUtc(end) }
+}
+
 export default function PortfolioSetupPage() {
   const navigate = useNavigate()
-  const { userId, isSignedIn, getToken } = useAuth()
+  const { isSignedIn, getToken } = useAuth()
   const { pendingDraft, draftRevision, noteSaved, portfolios, activeId } = useActivePortfolio()
   const [portfolioName, setPortfolioName] = useState('')
   const [initialPortfolioValue, setInitialPortfolioValue] = useState('')
-  const [strategy, setStrategy] = useState('')
-  const [maxWeight, setMaxWeight] = useState('')
-  const [riskFree, setRiskFree] = useState('')
-  const [targetReturn, setTargetReturn] = useState('')
-  const [targetVolatility, setTargetVolatility] = useState('')
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [referencePrices, setReferencePrices] = useState<Record<string, number>>({})
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [running, setRunning] = useState(false)
-  const [runError, setRunError] = useState<string | null>(null)
-  const [historyKey, setHistoryKey] = useState(0)
+  const [analysisDefaults, setAnalysisDefaults] = useState({
+    startDate: '',
+    endDate: '',
+    strategy: 'min_variance',
+    maxWeightPercent: 100,
+    riskFreePercent: 4,
+    targetReturnPercent: null as number | null,
+    targetVolatilityPercent: null as number | null,
+  })
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveNote, setSaveNote] = useState<string | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importNotes, setImportNotes] = useState<string[]>([])
+  const [brokerage, setBrokerage] = useState<BrokerageId>('schwab')
   const csvInputRef = useRef<HTMLInputElement>(null)
+  const selectedBrokerage = BROKERAGE_OPTIONS.find((option) => option.id === brokerage)
+  const canImport = selectedBrokerage?.available === true
 
   const disabledSymbols = useMemo(
     () => new Set(holdings.map((holding) => holding.symbol)),
@@ -87,57 +98,15 @@ export default function PortfolioSetupPage() {
   const parsedInitialValue = Number(initialPortfolioValue)
   const initialValue =
     Number.isFinite(parsedInitialValue) && parsedInitialValue > 0 ? parsedInitialValue : 0
-  const parsedMaxWeight = Number(maxWeight)
-  const parsedRiskFree = Number(riskFree)
-  const parsedTargetReturn = Number(targetReturn)
-  const parsedTargetVolatility = Number(targetVolatility)
-  const missingForRun = useMemo(() => {
+  const missingForSave = useMemo(() => {
     const missing: string[] = []
     if (!portfolioName.trim()) missing.push('portfolio name')
     if (!(initialValue > 0)) missing.push('initial portfolio value')
-    if (!strategy) missing.push('strategy')
-    if (!(maxWeight.trim() && Number.isFinite(parsedMaxWeight) && parsedMaxWeight > 0)) {
-      missing.push('maximum weight')
-    }
-    if (!(riskFree.trim() && Number.isFinite(parsedRiskFree))) missing.push('risk-free rate')
-    if (
-      strategy === 'target_return' &&
-      !(targetReturn.trim() && Number.isFinite(parsedTargetReturn))
-    ) {
-      missing.push('target return')
-    }
-    if (
-      strategy === 'target_risk' &&
-      !(
-        targetVolatility.trim() &&
-        Number.isFinite(parsedTargetVolatility) &&
-        parsedTargetVolatility > 0
-      )
-    ) {
-      missing.push('target volatility')
-    }
-    if (!startDate || !endDate) missing.push('start and end dates')
-    else if (!(startDate < endDate)) missing.push('a start date before the end date')
     if (holdings.length < 2) missing.push('at least two assets')
     else if (!weightsAreComplete(holdings)) missing.push('weights that total 100%')
     return missing
-  }, [
-    portfolioName,
-    initialValue,
-    strategy,
-    maxWeight,
-    parsedMaxWeight,
-    riskFree,
-    parsedRiskFree,
-    targetReturn,
-    parsedTargetReturn,
-    targetVolatility,
-    parsedTargetVolatility,
-    startDate,
-    endDate,
-    holdings,
-  ])
-  const readyForAnalysis = missingForRun.length === 0
+  }, [portfolioName, initialValue, holdings])
+  const readyToSave = missingForSave.length === 0
 
   function handleAdd(stock: StockSearchResult) {
     setHoldings((current) =>
@@ -149,12 +118,15 @@ export default function PortfolioSetupPage() {
     )
   }
 
-  async function handleSchwabCsv(file: File) {
+  async function handleBrokerageCsv(file: File) {
     setImportError(null)
     setImportNotes([])
     try {
+      if (!canImport) {
+        throw new Error('Choose an available brokerage before importing.')
+      }
       const text = await file.text()
-      const imported = parseSchwabPositionsCsv(text)
+      const imported = parseBrokeragePositionsCsv(brokerage, text)
       if (imported.portfolioName) setPortfolioName(imported.portfolioName)
       if (imported.initialCapital > 0) {
         setInitialPortfolioValue(String(imported.initialCapital))
@@ -164,7 +136,7 @@ export default function PortfolioSetupPage() {
       setImportNotes(imported.notes)
     } catch (caught) {
       setImportError(
-        caught instanceof Error ? caught.message : 'Could not import the Schwab CSV file.',
+        caught instanceof Error ? caught.message : 'Could not import the brokerage CSV file.',
       )
     } finally {
       if (csvInputRef.current) csvInputRef.current.value = ''
@@ -174,208 +146,107 @@ export default function PortfolioSetupPage() {
   function handleInitialValueChange(value: string) {
     setInitialPortfolioValue(value)
     const next = Number(value)
-    if (!(Number.isFinite(next) && next > 0)) {
-      return
-    }
-    setHoldings((current) => resyncQuantities(current, next, referencePrices))
+    if (!(Number.isFinite(next) && next > 0)) return
+    setHoldings((current) => applyPricesToHoldings(current, next, referencePrices))
   }
 
   function handleLoadPortfolio(draft: PortfolioDraft) {
-    const isBlank = !draft.portfolioName && !draft.strategy && draft.holdings.length === 0
     setPortfolioName(draft.portfolioName)
     setInitialPortfolioValue(optionalNumberText(draft.initialCapital))
-    setStartDate(draft.startDate)
-    setEndDate(draft.endDate)
-    setStrategy(draft.strategy)
-    setMaxWeight(optionalNumberText(draft.maxWeightPercent))
-    setRiskFree(isBlank ? '' : String(draft.riskFreePercent))
-    setTargetReturn(
-      draft.targetReturnPercent == null ? '' : String(draft.targetReturnPercent),
-    )
-    setTargetVolatility(
-      draft.targetVolatilityPercent == null ? '' : String(draft.targetVolatilityPercent),
-    )
     setHoldings(draft.holdings)
     setReferencePrices(draft.referencePrices)
-    setRunError(null)
+    setAnalysisDefaults({
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      strategy: draft.strategy || 'min_variance',
+      maxWeightPercent: draft.maxWeightPercent > 0 ? draft.maxWeightPercent : 100,
+      riskFreePercent: Number.isFinite(draft.riskFreePercent) ? draft.riskFreePercent : 4,
+      targetReturnPercent: draft.targetReturnPercent,
+      targetVolatilityPercent: draft.targetVolatilityPercent,
+    })
+    setSaveError(null)
+    setSaveNote(null)
     setImportError(null)
     setImportNotes([])
-    setHistoryKey((current) => current + 1)
   }
 
   useEffect(() => {
     if (draftRevision > 0 && pendingDraft) handleLoadPortfolio(pendingDraft)
   }, [draftRevision, pendingDraft])
 
-  async function prepareDraftWithPrices(): Promise<PortfolioDraft> {
-    if (!portfolioName.trim()) throw new Error('Enter a portfolio name.')
-    if (!strategy) throw new Error('Choose an analysis strategy.')
-    if (!(parsedMaxWeight > 0) || !Number.isFinite(parsedRiskFree)) {
-      throw new Error('Enter a positive maximum weight and a risk-free rate.')
-    }
-    if (strategy === 'target_return' && !Number.isFinite(parsedTargetReturn)) {
-      throw new Error('Enter a target annual return for this strategy.')
-    }
-    if (
-      strategy === 'target_risk' &&
-      !(Number.isFinite(parsedTargetVolatility) && parsedTargetVolatility > 0)
-    ) {
-      throw new Error('Enter a positive target annual volatility for this strategy.')
-    }
-    const prices = await ensureHoldingsPrices(
-      holdings.map((holding) => holding.symbol),
-      startDate,
-      endDate,
-    )
-    const nextHoldings = resyncQuantities(holdings, initialValue, prices)
-    setReferencePrices(prices)
-    setHoldings(nextHoldings)
-    return {
-      portfolioName: portfolioName.trim(),
-      initialCapital: initialValue,
-      startDate,
-      endDate,
-      strategy,
-      maxWeightPercent: parsedMaxWeight,
-      riskFreePercent: parsedRiskFree,
-      targetReturnPercent: strategy === 'target_return' ? parsedTargetReturn : null,
-      targetVolatilityPercent: strategy === 'target_risk' ? parsedTargetVolatility : null,
-      holdings: nextHoldings,
-      referencePrices: prices,
-    }
-  }
-
-  async function saveDraftIfNeeded(
-    draft: PortfolioDraft,
-  ): Promise<{ saveNote: string | null; portfolioId: string | null }> {
-    if (!isSignedIn) {
-      return {
-        saveNote:
-          'Signed out: results stay in this browser only. Sign in to keep the portfolio on the dashboard switcher.',
-        portfolioId: activeId,
-      }
-    }
-    const name = draft.portfolioName.trim()
-    const existing = portfolios.find((row) => row.name === name)
-    if (existing) {
-      return { saveNote: null, portfolioId: existing.id }
-    }
+  async function handleSavePortfolio() {
+    if (!readyToSave) return
+    setSaving(true)
+    setSaveError(null)
+    setSaveNote(null)
     try {
+      const range =
+        analysisDefaults.startDate &&
+        analysisDefaults.endDate &&
+        analysisDefaults.startDate < analysisDefaults.endDate
+          ? {
+              startDate: analysisDefaults.startDate,
+              endDate: analysisDefaults.endDate,
+            }
+          : defaultHistoryRange()
+      const prices = await ensureHoldingsPrices(
+        holdings.map((holding) => holding.symbol),
+        range.startDate,
+        range.endDate,
+      )
+      const nextHoldings = applyPricesToHoldings(holdings, initialValue, prices)
+      setReferencePrices(prices)
+      setHoldings(nextHoldings)
+      const draft: PortfolioDraft = {
+        portfolioName: portfolioName.trim(),
+        initialCapital: initialValue,
+        startDate: range.startDate,
+        endDate: range.endDate,
+        strategy: analysisDefaults.strategy || 'min_variance',
+        maxWeightPercent: analysisDefaults.maxWeightPercent,
+        riskFreePercent: analysisDefaults.riskFreePercent,
+        targetReturnPercent: analysisDefaults.targetReturnPercent,
+        targetVolatilityPercent: analysisDefaults.targetVolatilityPercent,
+        holdings: nextHoldings,
+        referencePrices: prices,
+      }
+
+      if (!isSignedIn) {
+        setSaveNote(
+          'Signed out: holdings stay in this browser only. Sign in to save the portfolio, then open Portfolio analysis.',
+        )
+        return
+      }
+
+      const existing = portfolios.find((row) => row.name === draft.portfolioName)
+      if (existing || activeId) {
+        setSaveNote(
+              'This portfolio is already on your account. Holdings updates need a fresh name for now — continue in Portfolio analysis, or use New portfolio in the dropdown.',
+        )
+        return
+      }
+
       const token = await getToken()
       if (!token) {
-        return {
-          saveNote: 'Could not read the session token. Sign in again to save portfolios.',
-          portfolioId: activeId,
-        }
+        throw new Error('Could not read the session token. Sign in again to save portfolios.')
       }
       const saved = await createPortfolio(token, draft)
       noteSaved(saved)
-      return { saveNote: null, portfolioId: saved.id }
+      setSaveNote('Portfolio saved. Continue in Portfolio analysis to run a strategy.')
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'duplicate_portfolio_name') {
-        const row = portfolios.find((item) => item.name === name)
-        return { saveNote: null, portfolioId: row?.id ?? activeId }
+        setSaveNote('A portfolio with this name already exists. Open it from the dashboard switcher.')
+        return
       }
-      return {
-        saveNote:
-          caught instanceof ApiError
-            ? `Saved run locally, but portfolio save failed (${caught.code}: ${caught.message}).`
-            : caught instanceof Error
-              ? `Saved run locally, but portfolio save failed (${caught.message}).`
-              : 'Saved run locally, but portfolio save failed.',
-        portfolioId: activeId,
-      }
-    }
-  }
-
-  async function handleRunAnalysis() {
-    if (!readyForAnalysis) {
-      return
-    }
-    setRunning(true)
-    setRunError(null)
-    try {
-      const draft = await prepareDraftWithPrices()
-      const tickers = draft.holdings.map((holding) => holding.symbol)
-      const currentWeights = draft.holdings.map((holding) => holding.weightPercent / 100)
-      const maxWeightValue = draft.maxWeightPercent / 100
-      const riskFreeRate = draft.riskFreePercent / 100
-      const targetReturn =
-        draft.targetReturnPercent == null ? null : draft.targetReturnPercent / 100
-      const targetVolatility =
-        draft.targetVolatilityPercent == null ? null : draft.targetVolatilityPercent / 100
-      const result = await runOptimization({
-        tickers,
-        startDate: draft.startDate,
-        endDate: draft.endDate,
-        strategy: draft.strategy,
-        maxWeight: maxWeightValue,
-        riskFreeRate,
-        currentWeights,
-        initialCapital: draft.initialCapital,
-        targetReturn,
-        targetVolatility,
-      })
-      const { saveNote, portfolioId } = await saveDraftIfNeeded(draft)
-      let persistNote = saveNote
-      if (portfolioId && isSignedIn) {
-        try {
-          const token = await getToken()
-          if (token) {
-            await saveOptimizationRun(
-              portfolioId,
-              {
-                tickers,
-                start_date: draft.startDate,
-                end_date: draft.endDate,
-                strategy: draft.strategy,
-                max_weight: maxWeightValue,
-                risk_free_rate: riskFreeRate,
-                target_return: targetReturn,
-                target_volatility: targetVolatility,
-                initial_capital: draft.initialCapital,
-                current_weights: currentWeights,
-              },
-              result,
-              token,
-            )
-          }
-        } catch (caught) {
-          const detail =
-            caught instanceof ApiError
-              ? `${caught.code}: ${caught.message}`
-              : caught instanceof Error
-                ? caught.message
-                : 'unknown error'
-          persistNote = persistNote
-            ? `${persistNote} Run history save failed (${detail}).`
-            : `Saved run locally, but run history save failed (${detail}).`
-        }
-      }
-      saveLastOptimizationRun(
-        {
-          result,
-          holdings: draft.holdings,
-          portfolioName: draft.portfolioName,
-          referencePrices: draft.referencePrices,
-          initialCapital: draft.initialCapital,
-          saveNote: persistNote,
-          portfolioId,
-        },
-        userId,
-        portfolioId,
-      )
-      navigate('/')
-    } catch (caught) {
-      setRunError(
+      setSaveError(
         caught instanceof ApiError
           ? `${caught.code}: ${caught.message}`
           : caught instanceof Error
             ? caught.message
-            : 'Optimization failed.',
+            : 'Could not save portfolio.',
       )
     } finally {
-      setRunning(false)
+      setSaving(false)
     }
   }
 
@@ -383,276 +254,197 @@ export default function PortfolioSetupPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-semibold">Portfolio setup</h1>
+          <h1 className="font-heading text-2xl font-semibold">Portfolio manager</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Choose stocks and ETFs, set your current allocation, and define the assumptions for a
-            historical analysis.
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Illustrative sample · As of {new Date().toLocaleDateString()} · Running analysis loads
-            prices and saves the portfolio when you are signed in
+            Switch portfolios, create new ones, and edit holdings and weights. Strategy and date range
+            live on Portfolio analysis.
           </p>
           {!isSignedIn && (
             <p className="mt-2 text-sm text-muted-foreground">
               <Link to="/login" className="underline">
                 Sign in
               </Link>{' '}
-              to keep portfolios on the dashboard switcher after a run.
+              to save portfolios to your account.
             </p>
           )}
         </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>1. Name your portfolio</CardTitle>
-              <CardDescription>
-                Enter details manually, or import a Charles Schwab Positions CSV to fill the name,
-                cost-basis value, symbols, and weights.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <input
-                  ref={csvInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="sr-only"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) void handleSchwabCsv(file)
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => csvInputRef.current?.click()}
-                >
-                  Import Schwab CSV
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Expects a Schwab Positions CSV: title line with the account name, then columns
-                  Symbol, % of Acct, and Cost Basis (plus Cash / Positions Total rows).
-                </p>
-              </div>
-              {importError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{importError}</AlertDescription>
-                </Alert>
-              )}
-              {importNotes.length > 0 && (
-                <Alert>
-                  <AlertDescription>
-                    <ul className="list-disc space-y-1 pl-4">
-                      {importNotes.map((note) => (
-                        <li key={note}>{note}</li>
-                      ))}
-                    </ul>
-                  </AlertDescription>
-                </Alert>
-              )}
-              <FieldGroup className="grid gap-4 sm:grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="portfolio-name">Portfolio name</FieldLabel>
-                  <Input
-                    id="portfolio-name"
-                    value={portfolioName}
-                    placeholder={FIELD_HINTS.portfolioName}
-                    onChange={(event) => setPortfolioName(event.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="initial-value">Initial portfolio value (USD)</FieldLabel>
-                  <Input
-                    id="initial-value"
-                    value={initialPortfolioValue}
-                    placeholder={FIELD_HINTS.initialCapital}
-                    inputMode="decimal"
-                    onChange={(event) => handleInitialValueChange(event.target.value)}
-                  />
-                  <FieldDescription>
-                    Scales equity charts and estimated share counts. Schwab import uses Cost Basis.
-                  </FieldDescription>
-                </Field>
-              </FieldGroup>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>2. Select assets and set weights</CardTitle>
-              <CardDescription>
-                Search by ticker or company name, then set weights that total 100%. Share quantities
-                are estimated from prices when you run analysis.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <StockSearch onAdd={handleAdd} disabledSymbols={disabledSymbols} />
-              <HoldingsTable
-                holdings={holdings}
-                prices={referencePrices}
-                onWeightChange={(symbol, weightPercent) =>
-                  setHoldings((current) =>
-                    updateHoldingWeight(
-                      current,
-                      symbol,
-                      weightPercent,
-                      initialValue,
-                      referencePrices,
-                    ),
-                  )
-                }
-                onRemove={(symbol) => setHoldings((current) => removeHolding(current, symbol))}
+        <div className="w-full min-w-[20rem] max-w-xl shrink-0 space-y-3">
+          <PortfolioSwitcher
+            mode="manage"
+            label="Portfolio"
+            className="w-full max-w-none sm:items-stretch"
+          />
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Import from brokerage (optional)
+            </p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Select
+                value={brokerage}
+                onValueChange={(value) => setBrokerage(value as BrokerageId)}
+              >
+                <SelectTrigger className="h-9 min-w-0 flex-1">
+                  <SelectValue placeholder="Choose a brokerage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BROKERAGE_OPTIONS.map((option) => (
+                    <SelectItem
+                      key={option.id}
+                      value={option.id}
+                      disabled={!option.available}
+                    >
+                      {option.available ? option.label : `${option.label} (coming soon)`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void handleBrokerageCsv(file)
+                }}
               />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>4. Set the historical period</CardTitle>
-              <CardDescription>
-                Choose the date range used for analysis. Prices for that range load automatically
-                when you run analysis.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <HistoryPeriodPanel
-                key={historyKey}
-                startDate={startDate}
-                endDate={endDate}
-                onStartDateChange={setStartDate}
-                onEndDateChange={setEndDate}
-              />
-            </CardContent>
-          </Card>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0"
+                disabled={!canImport}
+                onClick={() => csvInputRef.current?.click()}
+              >
+                Import CSV
+              </Button>
+            </div>
+            {importError && (
+              <Alert variant="destructive">
+                <AlertDescription>{importError}</AlertDescription>
+              </Alert>
+            )}
+            {importNotes.length > 0 && (
+              <Alert>
+                <AlertDescription>
+                  <ul className="list-disc space-y-1 pl-4">
+                    {importNotes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
         </div>
-
-        <Card className="h-fit xl:sticky xl:top-6">
-          <CardHeader>
-            <CardTitle>3. Choose your analysis settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <FieldGroup>
-              <Field>
-                <FieldLabel>Strategy</FieldLabel>
-                <Select
-                  value={strategy || undefined}
-                  onValueChange={setStrategy}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={FIELD_HINTS.strategy} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="min_variance">Minimum variance (lowest risk)</SelectItem>
-                    <SelectItem value="max_sharpe">
-                      Maximum Sharpe ratio (best return for its risk)
-                    </SelectItem>
-                    <SelectItem value="target_return">
-                      Target return (lowest risk for a return goal)
-                    </SelectItem>
-                    <SelectItem value="target_risk">
-                      Target risk (highest return under a volatility cap)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              {strategy === 'target_return' && (
-                <Field>
-                  <FieldLabel htmlFor="target-return">Target annual return (%)</FieldLabel>
-                  <Input
-                    id="target-return"
-                    value={targetReturn}
-                    placeholder={FIELD_HINTS.targetReturn}
-                    inputMode="decimal"
-                    onChange={(event) => setTargetReturn(event.target.value)}
-                  />
-                </Field>
-              )}
-              {strategy === 'target_risk' && (
-                <Field>
-                  <FieldLabel htmlFor="target-volatility">
-                    Target annual volatility (%)
-                  </FieldLabel>
-                  <Input
-                    id="target-volatility"
-                    value={targetVolatility}
-                    placeholder={FIELD_HINTS.targetVolatility}
-                    inputMode="decimal"
-                    onChange={(event) => setTargetVolatility(event.target.value)}
-                  />
-                </Field>
-              )}
-              <Field>
-                <FieldLabel htmlFor="max-weight">Maximum weight per asset (%)</FieldLabel>
-                <Input
-                  id="max-weight"
-                  value={maxWeight}
-                  placeholder={FIELD_HINTS.maxWeight}
-                  inputMode="decimal"
-                  onChange={(event) => setMaxWeight(event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="risk-free">Assumed annual risk-free rate (%)</FieldLabel>
-                <Input
-                  id="risk-free"
-                  value={riskFree}
-                  placeholder={FIELD_HINTS.riskFree}
-                  inputMode="decimal"
-                  onChange={(event) => setRiskFree(event.target.value)}
-                />
-              </Field>
-              <FieldDescription>
-                Running analysis loads prices, optimizes, and saves the portfolio when you are signed
-                in.
-              </FieldDescription>
-            </FieldGroup>
-          </CardContent>
-        </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>1. Name your portfolio</CardTitle>
+          <CardDescription>Set the portfolio name and starting value.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="portfolio-name">Portfolio name</FieldLabel>
+              <Input
+                id="portfolio-name"
+                value={portfolioName}
+                placeholder={FIELD_HINTS.portfolioName}
+                onChange={(event) => setPortfolioName(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="initial-value">Initial portfolio value (USD)</FieldLabel>
+              <Input
+                id="initial-value"
+                value={initialPortfolioValue}
+                placeholder={FIELD_HINTS.initialCapital}
+                inputMode="decimal"
+                onChange={(event) => handleInitialValueChange(event.target.value)}
+              />
+              <FieldDescription>
+                Scales equity charts and estimated share counts.
+              </FieldDescription>
+            </Field>
+          </FieldGroup>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>2. Select assets and set weights</CardTitle>
+          <CardDescription>
+            Search by ticker or company name, then set weights that total 100%. Quantity is estimated
+            from prices, or taken from a brokerage import.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <StockSearch onAdd={handleAdd} disabledSymbols={disabledSymbols} />
+          <HoldingsTable
+            holdings={holdings}
+            prices={referencePrices}
+            onWeightChange={(symbol, weightPercent) =>
+              setHoldings((current) =>
+                updateHoldingWeight(
+                  current,
+                  symbol,
+                  weightPercent,
+                  initialValue,
+                  referencePrices,
+                ),
+              )
+            }
+            onRemove={(symbol) => setHoldings((current) => removeHolding(current, symbol))}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-medium">Ready to run analysis</p>
+            <p className="font-medium">Save portfolio holdings</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {holdings.length} assets · Weights {sumWeights(holdings).toFixed(0)}% /{' '}
-              {TARGET_WEIGHT_TOTAL}% · Max {maxWeight || '—'}% · Risk-free rate {riskFree || '—'}%
+              {TARGET_WEIGHT_TOTAL}%
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Results are historical estimates
-              {startDate && endDate ? ` for ${startDate} to ${endDate}` : ''}
-              , not guaranteed outcomes.
-              {isSignedIn
-                ? ' A new portfolio name is saved to your account on this run.'
-                : ' Sign in to save the portfolio to your account.'}
-            </p>
-            {!readyForAnalysis && (
+            {!readyToSave && (
               <p className="mt-2 text-sm text-amber-700">
-                Still needed: {missingForRun.join(', ')}. Gray placeholder text is only a hint — type
-                real values into each field.
+                Still needed: {missingForSave.join(', ')}.
               </p>
             )}
-            {runError && (
+            {saveError && (
               <Alert variant="destructive" className="mt-3">
-                <AlertDescription>{runError}</AlertDescription>
+                <AlertDescription>{saveError}</AlertDescription>
+              </Alert>
+            )}
+            {saveNote && (
+              <Alert className="mt-3">
+                <AlertDescription>{saveNote}</AlertDescription>
               </Alert>
             )}
           </div>
-          <Button
-            type="button"
-            disabled={!readyForAnalysis || running}
-            title={
-              readyForAnalysis
-                ? 'Load prices, run optimization, and save the portfolio when signed in.'
-                : `Still needed: ${missingForRun.join(', ')}.`
-            }
-            onClick={() => void handleRunAnalysis()}
-          >
-            {running ? 'Loading prices & running…' : 'Review & run analysis'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate('/analyze')}
+            >
+              Go to analysis
+            </Button>
+            <Button
+              type="button"
+              disabled={!readyToSave || saving}
+              title={
+                readyToSave
+                  ? 'Load prices and save the portfolio when signed in.'
+                  : `Still needed: ${missingForSave.join(', ')}.`
+              }
+              onClick={() => void handleSavePortfolio()}
+            >
+              {saving ? 'Saving…' : 'Save portfolio'}
+            </Button>
+          </div>
         </CardFooter>
       </Card>
     </div>

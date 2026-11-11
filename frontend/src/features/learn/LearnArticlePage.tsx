@@ -62,7 +62,7 @@ export default function LearnArticlePage() {
           </Button>
         ) : (
           <Button asChild variant="outline">
-            <Link to="/setup">Open portfolio setup</Link>
+            <Link to="/setup">Open portfolio manager</Link>
           </Button>
         )}
       </div>

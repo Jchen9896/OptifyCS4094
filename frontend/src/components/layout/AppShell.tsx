@@ -3,6 +3,7 @@ import {
   BookOpen,
   CandlestickChart,
   LayoutDashboard,
+  LineChart,
   LogOut,
   Settings,
   SlidersHorizontal,
@@ -32,7 +33,8 @@ import { cn } from '@/lib/utils'
 const SIDEBAR_WIDTH_PX = 232
 
 function crumbFor(pathname: string): [string, string] {
-  if (pathname.startsWith('/setup')) return ['Portfolio', 'Portfolio setup']
+  if (pathname.startsWith('/setup')) return ['Portfolio', 'Portfolio manager']
+  if (pathname.startsWith('/analyze')) return ['Portfolio', 'Portfolio analysis']
   if (pathname.startsWith('/compare')) return ['Portfolio', 'Compare portfolios']
   if (pathname.startsWith('/trade')) return ['Trade', 'Trade']
   if (pathname.startsWith('/settings')) return ['Settings', 'Settings']
@@ -105,7 +107,11 @@ export default function AppShell() {
             </NavLink>
             <NavLink to="/setup" className={navLinkClass}>
               <SlidersHorizontal className="size-4" />
-              Portfolio setup
+              Portfolio manager
+            </NavLink>
+            <NavLink to="/analyze" className={navLinkClass}>
+              <LineChart className="size-4" />
+              Portfolio analysis
             </NavLink>
             <NavLink to="/compare" className={navLinkClass}>
               <ArrowLeftRight className="size-4" />
