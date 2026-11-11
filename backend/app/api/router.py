@@ -8,6 +8,7 @@ from app.api.routes.optimization_runs import router as optimization_runs_router
 from app.api.routes.optimizations import router as optimizations_router
 from app.api.routes.portfolios import router as portfolios_router
 from app.api.routes.stocks import router as stocks_router
+from app.api.routes.trade import router as trade_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -18,3 +19,4 @@ api_router.include_router(market_data_router)
 api_router.include_router(optimizations_router)
 api_router.include_router(portfolios_router)
 api_router.include_router(optimization_runs_router)
+api_router.include_router(trade_router)
