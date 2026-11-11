@@ -1,5 +1,13 @@
-import { ArrowLeftRight, BookOpen, LayoutDashboard, LogOut, SlidersHorizontal } from 'lucide-react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import {
+  ArrowLeftRight,
+  BookOpen,
+  CandlestickChart,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  SlidersHorizontal,
+} from 'lucide-react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useClerk, useUser } from '@clerk/react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -9,7 +17,14 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { getLearnArticle } from '@/features/learn/articles.ts'
 import { useActivePortfolio } from '@/features/portfolio/ActivePortfolioContext.tsx'
 import { cn } from '@/lib/utils'
@@ -19,6 +34,8 @@ const SIDEBAR_WIDTH_PX = 232
 function crumbFor(pathname: string): [string, string] {
   if (pathname.startsWith('/setup')) return ['Portfolio', 'Portfolio setup']
   if (pathname.startsWith('/compare')) return ['Portfolio', 'Compare portfolios']
+  if (pathname.startsWith('/trade')) return ['Trade', 'Trade']
+  if (pathname.startsWith('/settings')) return ['Settings', 'Settings']
   if (pathname.startsWith('/learn/')) {
     const slug = pathname.slice('/learn/'.length).split('/')[0]
     return ['Learn', getLearnArticle(slug)?.title ?? 'Article']
@@ -43,8 +60,17 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
   )
 
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
+      {children}
+    </p>
+  )
+}
+
 export default function AppShell() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user } = useUser()
   const { signOut } = useClerk()
   const [section, page] = crumbFor(location.pathname)
@@ -71,9 +97,7 @@ export default function AppShell() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
-            Portfolio
-          </p>
+          <SectionLabel>Portfolio</SectionLabel>
           <nav className="flex flex-col gap-1">
             <NavLink to="/" end className={navLinkClass}>
               <LayoutDashboard className="size-4" />
@@ -90,9 +114,17 @@ export default function AppShell() {
           </nav>
 
           <div className="mt-8">
-            <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
-              Learn
-            </p>
+            <SectionLabel>Trade</SectionLabel>
+            <nav className="flex flex-col gap-1">
+              <NavLink to="/trade" className={navLinkClass}>
+                <CandlestickChart className="size-4" />
+                Trade
+              </NavLink>
+            </nav>
+          </div>
+
+          <div className="mt-8">
+            <SectionLabel>Learn</SectionLabel>
             <nav className="flex flex-col gap-1">
               <NavLink
                 to="/learn"
@@ -110,29 +142,51 @@ export default function AppShell() {
         </div>
 
         <div className="mt-4 shrink-0 border-t border-sidebar-border pt-4">
-          <div className="flex items-center gap-3 px-1">
-            <Avatar size="sm">
-              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-sidebar-foreground">
-                {email ?? 'Signed in'}
-              </p>
-              <p className="truncate text-xs text-sidebar-foreground/55">{activeLabel}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => void signOut()}
-              className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[state=open]:bg-sidebar-primary data-[state=open]:text-sidebar-primary-foreground"
+              >
+                <Avatar size="sm">
+                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground data-[state=open]:bg-sidebar-primary-foreground/15">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{email ?? 'Signed in'}</p>
+                  <p className="truncate text-xs opacity-70">{activeLabel}</p>
+                </div>
+                <Settings className="size-4 shrink-0 opacity-70" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="start"
+              sideOffset={8}
+              className="w-[min(100vw-2rem,16.5rem)] border-0 bg-sidebar-primary p-1.5 text-sidebar-primary-foreground shadow-md ring-0"
             >
-              <span aria-label="Sign out">
+              <DropdownMenuLabel className="px-2.5 py-2 font-normal text-sidebar-primary-foreground">
+                <p className="truncate text-sm font-medium">{email ?? 'Signed in'}</p>
+                <p className="truncate text-xs opacity-75">{activeLabel}</p>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-sidebar-primary-foreground/20" />
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md px-2.5 py-2 text-sidebar-primary-foreground focus:bg-sidebar-primary-foreground/15 focus:text-sidebar-primary-foreground"
+                onSelect={() => navigate('/settings')}
+              >
+                <Settings className="size-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer rounded-md px-2.5 py-2 text-sidebar-primary-foreground focus:bg-sidebar-primary-foreground/15 focus:text-sidebar-primary-foreground"
+                onSelect={() => void signOut()}
+              >
                 <LogOut className="size-4" />
-              </span>
-            </Button>
-          </div>
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 
