@@ -54,6 +54,19 @@ def api():
     engine.dispose()
 
 
+def test_export_account_data_includes_portfolios(api):
+    client, owner, _engine, user_id = api
+    response = client.get("/api/account/export", headers=owner)
+    assert response.status_code == 200
+    assert "attachment" in response.headers.get("content-disposition", "")
+    payload = response.json()
+    assert payload["format_version"] == 1
+    assert payload["user"]["id"] == str(user_id)
+    assert len(payload["portfolios"]) == 1
+    assert payload["portfolios"][0]["name"] == "Core"
+    assert payload["brokerage_connections"] == []
+
+
 def test_delete_account_removes_user_and_portfolios(api):
     client, owner, engine, user_id = api
     response = client.delete("/api/account", headers=owner)
