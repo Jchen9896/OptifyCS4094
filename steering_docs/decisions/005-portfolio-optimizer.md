@@ -6,6 +6,7 @@ Calculate portfolio weights with a subclass of `OptimizationStrategy` in `backen
 | --- | --- | --- |
 | `MinimumVarianceStrategy` | `min_variance` | The lowest risk (variance) |
 | `MaxSharpeStrategy` | `max_sharpe` | The highest Sharpe ratio: (expected return - risk-free rate) / volatility |
+| `TargetReturnStrategy` | `target_return` | The lowest risk with an expected return of at least the target |
 
 ## Rules
 
@@ -38,6 +39,18 @@ This works only if an allocation under the rules has an expected return above th
 
 Known limit: max Sharpe is very sensitive to the expected returns (Palomar, section 7.5). Small errors in the expected returns can move most of the money into one or two stocks. A `max_weight` cap decreases this problem.
 
+## Target return
+
+`TargetReturnStrategy` finds the allocation with the lowest risk whose expected return is at least the target. It solves problem 7.3 in Palomar, *Portfolio Optimization*, section 7.1.2:
+
+minimize wᵀΣw, with μᵀw ≥ target return, "the weights add up to 1" and `weight_constraints`.
+
+- The rule is "at least the target", not "equal to the target". With "equal", a target below the minimum-variance return gives an allocation with more risk and less return than minimum variance. With "at least", such a target gives the minimum-variance allocation.
+- Before the solver, `check_target_return_reachable` compares the target with `highest_expected_return`. If the target is more than the tolerance above the highest return, the run fails with `unreachable_target`. The message suggests a target: the highest return, rounded down to 0.1%.
+- If the target is above the highest return by less than the tolerance, the solver gets the highest return. No allocation reaches more, and a higher value can make the solver report that no allocation is possible.
+- After the solver, the strategy checks that the expected return is not more than the tolerance below the target. If it is, the run fails with `optimization_failed`.
+- The strategy adds "Target return: at least <target>." to the assumptions.
+
 ## Minimum history
 
 Too few daily returns give an unreliable covariance matrix. The optimizer then gives weights that look exact but are mostly noise. Thus `OptimizationService` needs this number of daily returns that all stocks share:
@@ -57,7 +70,7 @@ Why these values:
 
 ## Tolerance
 
-All checks of calculated values use one absolute tolerance: **1e-5**. Each check gets the tolerance as a parameter. The optimization service will get the value from `Settings`. Values that are not calculated (counts, dates, `max_weight`) are compared exactly.
+All checks of calculated values use one absolute tolerance: **1e-5**. Each check gets the tolerance as a parameter. The optimization service gets the value from `Settings`. Values that are not calculated (counts, dates, `max_weight`) are compared exactly.
 
 | Check | Rule |
 | --- | --- |
@@ -65,6 +78,8 @@ All checks of calculated values use one absolute tolerance: **1e-5**. Each check
 | Covariance is valid | The smallest eigenvalue is not less than -tolerance |
 | Rules are feasible | Number of stocks x `max_weight` is not less than 1 - tolerance |
 | Can beat the risk-free rate | The highest expected return under the rules is more than the risk-free rate + tolerance |
+| Target return can be reached | The target return is not more than the highest expected return under the rules + tolerance |
+| Target return is met | The expected return of the result is not less than the target return - tolerance |
 | Solver noise | Weights nearer to 0 than the tolerance become 0 |
 | Weights follow the rules | Sum within the tolerance of 1, no weight below -tolerance, no weight above `max_weight` + tolerance |
 
@@ -82,10 +97,11 @@ Why 1e-5:
 | --- | --- | --- |
 | The request has a value of the wrong type or range, NaN or Infinity (for example, `max_weight` above 1) | `invalid_request` | 422 |
 | The stocks share fewer daily returns than the minimum (refer to "Minimum history") | `insufficient_history` | 422 |
-| The inputs do not agree (duplicate tickers, dates, sizes, missing values, bad covariance matrix) | `invalid_optimization_input` | 422 |
+| The inputs do not agree (duplicate tickers, dates, sizes, missing values, bad covariance matrix), or a target strategy has no target | `invalid_optimization_input` | 422 |
 | `max_weight` is too small for the number of stocks | `infeasible_allocation_rules` | 422 |
 | Max Sharpe only: no allocation under the rules beats the risk-free rate | `no_positive_excess_return` | 422 |
-| Solver error, status is not `optimal`, or the weights break a rule | `optimization_failed` | 422 |
+| Target strategies only: no allocation under the rules reaches the target | `unreachable_target` | 422 |
+| Solver error, status is not `optimal`, the weights break a rule, or the result does not meet the target | `optimization_failed` | 422 |
 
 ## Add a new strategy
 

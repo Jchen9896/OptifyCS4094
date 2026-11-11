@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.optimization.base import OptimizationStrategy
-from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy
+from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy, TargetReturnStrategy
 from app.optimization.validation import validate_optimizer_input
 from app.repositories.price_repository import PriceRepository
 from app.schemas.optimization import EquityCurvePointSchema, OptimizationResult, OptimizerInput
@@ -59,8 +59,13 @@ class OptimizationService:
         risk_free_rate: float | None,
         current_weights: list[float] | None = None,
         initial_capital: float | None = None,
+        target_return: float | None = None,
+        target_volatility: float | None = None,
     ) -> OptimizationResult:
-        """Optimize weights for `tickers` over the stored history in the date range."""
+        """Optimize weights for `tickers` over the stored history in the date range.
+
+        The targets go to the strategy. Only the target strategies use them.
+        """
         validate_date_range(start_date, end_date, self._max_span_days)
         normalized = [ticker.strip().upper() for ticker in tickers]
         if len(normalized) < 2:
@@ -108,7 +113,14 @@ class OptimizationService:
             period_end=end_date,
         )
         expected, covariance = validate_optimizer_input(optimizer_input, self._tolerance)
-        weights = selected.compute_weights(expected, covariance, max_weight, risk_free)
+        weights = selected.compute_weights(
+            expected,
+            covariance,
+            max_weight,
+            risk_free,
+            target_return=target_return,
+            target_volatility=target_volatility,
+        )
         expected_return, volatility, sharpe_ratio = _portfolio_metrics(
             weights, expected, covariance, risk_free
         )
@@ -144,6 +156,7 @@ class OptimizationService:
             f"Price source: {batch.source}; interval {batch.interval}; basis {batch.adjustment_basis}.",
             f"Strategy: {selected.name} (long-only weights sum to 100%).",
             f"Maximum weight per stock: {cap}.",
+            *selected.assumptions(target_return=target_return, target_volatility=target_volatility),
             f"Risk-free rate: {risk_free:g} (annual decimal).",
             f"Capital chart starts at {capital:g} with buy-and-hold weights.",
             "Results are historical estimates, not guaranteed outcomes.",
@@ -198,7 +211,11 @@ def create_optimization_service(settings: Settings, session: Session) -> Optimiz
     return OptimizationService(
         reader=reader,
         calendar=WeekdaySessionCalendar(),
-        strategies=[MinimumVarianceStrategy(tolerance, solver), MaxSharpeStrategy(tolerance, solver)],
+        strategies=[
+            MinimumVarianceStrategy(tolerance, solver),
+            MaxSharpeStrategy(tolerance, solver),
+            TargetReturnStrategy(tolerance, solver),
+        ],
         annualization_factor=settings.annualization_factor,
         tolerance=tolerance,
         default_risk_free_rate=settings.default_risk_free_rate,
