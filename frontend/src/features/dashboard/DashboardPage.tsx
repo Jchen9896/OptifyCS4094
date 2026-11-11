@@ -60,8 +60,8 @@ export default function DashboardPage() {
           <div>
             <h1 className="font-heading text-2xl font-semibold">Portfolio optimization overview</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              No optimization results for {activeLabel} in this browser session yet. Open setup to
-              run analysis for this portfolio.
+              No optimization results for {activeLabel} in this browser session yet. Use Edit or New
+              portfolio in the switcher to open setup and run analysis.
             </p>
           </div>
           <PortfolioSwitcher />
@@ -70,8 +70,8 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Get started</CardTitle>
             <CardDescription>
-              Switching portfolios here only changes the dashboard view. Use Open portfolio setup to
-              edit holdings and run analysis.
+              Switching portfolios here only changes the dashboard view. Use Edit on a saved
+              portfolio, or New portfolio, to open setup and run analysis.
             </CardDescription>
           </CardHeader>
         </Card>

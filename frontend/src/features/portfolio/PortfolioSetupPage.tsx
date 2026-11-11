@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@clerk/react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -41,6 +41,7 @@ import {
   updateHoldingWeight,
   weightsAreComplete,
 } from './holdings.ts'
+import { parseSchwabPositionsCsv } from './schwabCsv.ts'
 import { TARGET_WEIGHT_TOTAL, type Holding } from './types.ts'
 
 const FIELD_HINTS = {
@@ -75,6 +76,9 @@ export default function PortfolioSetupPage() {
   const [running, setRunning] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
   const [historyKey, setHistoryKey] = useState(0)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importNotes, setImportNotes] = useState<string[]>([])
+  const csvInputRef = useRef<HTMLInputElement>(null)
 
   const disabledSymbols = useMemo(
     () => new Set(holdings.map((holding) => holding.symbol)),
@@ -145,6 +149,28 @@ export default function PortfolioSetupPage() {
     )
   }
 
+  async function handleSchwabCsv(file: File) {
+    setImportError(null)
+    setImportNotes([])
+    try {
+      const text = await file.text()
+      const imported = parseSchwabPositionsCsv(text)
+      if (imported.portfolioName) setPortfolioName(imported.portfolioName)
+      if (imported.initialCapital > 0) {
+        setInitialPortfolioValue(String(imported.initialCapital))
+      }
+      setHoldings(imported.holdings)
+      setReferencePrices({})
+      setImportNotes(imported.notes)
+    } catch (caught) {
+      setImportError(
+        caught instanceof Error ? caught.message : 'Could not import the Schwab CSV file.',
+      )
+    } finally {
+      if (csvInputRef.current) csvInputRef.current.value = ''
+    }
+  }
+
   function handleInitialValueChange(value: string) {
     setInitialPortfolioValue(value)
     const next = Number(value)
@@ -172,6 +198,8 @@ export default function PortfolioSetupPage() {
     setHoldings(draft.holdings)
     setReferencePrices(draft.referencePrices)
     setRunError(null)
+    setImportError(null)
+    setImportNotes([])
     setHistoryKey((current) => current + 1)
   }
 
@@ -380,8 +408,51 @@ export default function PortfolioSetupPage() {
           <Card>
             <CardHeader>
               <CardTitle>1. Name your portfolio</CardTitle>
+              <CardDescription>
+                Enter details manually, or import a Charles Schwab Positions CSV to fill the name,
+                cost-basis value, symbols, and weights.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) void handleSchwabCsv(file)
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => csvInputRef.current?.click()}
+                >
+                  Import Schwab CSV
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Expects a Schwab Positions CSV: title line with the account name, then columns
+                  Symbol, % of Acct, and Cost Basis (plus Cash / Positions Total rows).
+                </p>
+              </div>
+              {importError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{importError}</AlertDescription>
+                </Alert>
+              )}
+              {importNotes.length > 0 && (
+                <Alert>
+                  <AlertDescription>
+                    <ul className="list-disc space-y-1 pl-4">
+                      {importNotes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
               <FieldGroup className="grid gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="portfolio-name">Portfolio name</FieldLabel>
@@ -402,8 +473,7 @@ export default function PortfolioSetupPage() {
                     onChange={(event) => handleInitialValueChange(event.target.value)}
                   />
                   <FieldDescription>
-                    Scales equity charts and estimated share counts. No brokerage funds are
-                    connected.
+                    Scales equity charts and estimated share counts. Schwab import uses Cost Basis.
                   </FieldDescription>
                 </Field>
               </FieldGroup>
