@@ -26,6 +26,7 @@ import { ensureHoldingsPrices } from '../history-period/historyApi.ts'
 import {
   runOptimization,
   saveLastOptimizationRun,
+  saveOptimizationRun,
 } from '../optimization/optimizationApi.ts'
 import StockSearch from '../stock-search/components/StockSearch.tsx'
 import type { StockSearchResult } from '../stock-search/stockApi.ts'
@@ -48,6 +49,8 @@ const FIELD_HINTS = {
   maxWeight: '45',
   riskFree: '4',
   strategy: 'Choose a strategy',
+  targetReturn: '8',
+  targetVolatility: '12',
 }
 
 function optionalNumberText(value: number): string {
@@ -63,6 +66,8 @@ export default function PortfolioSetupPage() {
   const [strategy, setStrategy] = useState('')
   const [maxWeight, setMaxWeight] = useState('')
   const [riskFree, setRiskFree] = useState('')
+  const [targetReturn, setTargetReturn] = useState('')
+  const [targetVolatility, setTargetVolatility] = useState('')
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [referencePrices, setReferencePrices] = useState<Record<string, number>>({})
   const [startDate, setStartDate] = useState('')
@@ -80,6 +85,8 @@ export default function PortfolioSetupPage() {
     Number.isFinite(parsedInitialValue) && parsedInitialValue > 0 ? parsedInitialValue : 0
   const parsedMaxWeight = Number(maxWeight)
   const parsedRiskFree = Number(riskFree)
+  const parsedTargetReturn = Number(targetReturn)
+  const parsedTargetVolatility = Number(targetVolatility)
   const missingForRun = useMemo(() => {
     const missing: string[] = []
     if (!portfolioName.trim()) missing.push('portfolio name')
@@ -89,6 +96,22 @@ export default function PortfolioSetupPage() {
       missing.push('maximum weight')
     }
     if (!(riskFree.trim() && Number.isFinite(parsedRiskFree))) missing.push('risk-free rate')
+    if (
+      strategy === 'target_return' &&
+      !(targetReturn.trim() && Number.isFinite(parsedTargetReturn))
+    ) {
+      missing.push('target return')
+    }
+    if (
+      strategy === 'target_risk' &&
+      !(
+        targetVolatility.trim() &&
+        Number.isFinite(parsedTargetVolatility) &&
+        parsedTargetVolatility > 0
+      )
+    ) {
+      missing.push('target volatility')
+    }
     if (!startDate || !endDate) missing.push('start and end dates')
     else if (!(startDate < endDate)) missing.push('a start date before the end date')
     if (holdings.length < 2) missing.push('at least two assets')
@@ -102,6 +125,10 @@ export default function PortfolioSetupPage() {
     parsedMaxWeight,
     riskFree,
     parsedRiskFree,
+    targetReturn,
+    parsedTargetReturn,
+    targetVolatility,
+    parsedTargetVolatility,
     startDate,
     endDate,
     holdings,
@@ -136,6 +163,12 @@ export default function PortfolioSetupPage() {
     setStrategy(draft.strategy)
     setMaxWeight(optionalNumberText(draft.maxWeightPercent))
     setRiskFree(isBlank ? '' : String(draft.riskFreePercent))
+    setTargetReturn(
+      draft.targetReturnPercent == null ? '' : String(draft.targetReturnPercent),
+    )
+    setTargetVolatility(
+      draft.targetVolatilityPercent == null ? '' : String(draft.targetVolatilityPercent),
+    )
     setHoldings(draft.holdings)
     setReferencePrices(draft.referencePrices)
     setRunError(null)
@@ -151,6 +184,15 @@ export default function PortfolioSetupPage() {
     if (!strategy) throw new Error('Choose an analysis strategy.')
     if (!(parsedMaxWeight > 0) || !Number.isFinite(parsedRiskFree)) {
       throw new Error('Enter a positive maximum weight and a risk-free rate.')
+    }
+    if (strategy === 'target_return' && !Number.isFinite(parsedTargetReturn)) {
+      throw new Error('Enter a target annual return for this strategy.')
+    }
+    if (
+      strategy === 'target_risk' &&
+      !(Number.isFinite(parsedTargetVolatility) && parsedTargetVolatility > 0)
+    ) {
+      throw new Error('Enter a positive target annual volatility for this strategy.')
     }
     const prices = await ensureHoldingsPrices(
       holdings.map((holding) => holding.symbol),
@@ -168,6 +210,8 @@ export default function PortfolioSetupPage() {
       strategy,
       maxWeightPercent: parsedMaxWeight,
       riskFreePercent: parsedRiskFree,
+      targetReturnPercent: strategy === 'target_return' ? parsedTargetReturn : null,
+      targetVolatilityPercent: strategy === 'target_risk' ? parsedTargetVolatility : null,
       holdings: nextHoldings,
       referencePrices: prices,
     }
@@ -224,17 +268,62 @@ export default function PortfolioSetupPage() {
     setRunError(null)
     try {
       const draft = await prepareDraftWithPrices()
+      const tickers = draft.holdings.map((holding) => holding.symbol)
+      const currentWeights = draft.holdings.map((holding) => holding.weightPercent / 100)
+      const maxWeightValue = draft.maxWeightPercent / 100
+      const riskFreeRate = draft.riskFreePercent / 100
+      const targetReturn =
+        draft.targetReturnPercent == null ? null : draft.targetReturnPercent / 100
+      const targetVolatility =
+        draft.targetVolatilityPercent == null ? null : draft.targetVolatilityPercent / 100
       const result = await runOptimization({
-        tickers: draft.holdings.map((holding) => holding.symbol),
+        tickers,
         startDate: draft.startDate,
         endDate: draft.endDate,
         strategy: draft.strategy,
-        maxWeight: draft.maxWeightPercent / 100,
-        riskFreeRate: draft.riskFreePercent / 100,
-        currentWeights: draft.holdings.map((holding) => holding.weightPercent / 100),
+        maxWeight: maxWeightValue,
+        riskFreeRate,
+        currentWeights,
         initialCapital: draft.initialCapital,
+        targetReturn,
+        targetVolatility,
       })
       const { saveNote, portfolioId } = await saveDraftIfNeeded(draft)
+      let persistNote = saveNote
+      if (portfolioId && isSignedIn) {
+        try {
+          const token = await getToken()
+          if (token) {
+            await saveOptimizationRun(
+              portfolioId,
+              {
+                tickers,
+                start_date: draft.startDate,
+                end_date: draft.endDate,
+                strategy: draft.strategy,
+                max_weight: maxWeightValue,
+                risk_free_rate: riskFreeRate,
+                target_return: targetReturn,
+                target_volatility: targetVolatility,
+                initial_capital: draft.initialCapital,
+                current_weights: currentWeights,
+              },
+              result,
+              token,
+            )
+          }
+        } catch (caught) {
+          const detail =
+            caught instanceof ApiError
+              ? `${caught.code}: ${caught.message}`
+              : caught instanceof Error
+                ? caught.message
+                : 'unknown error'
+          persistNote = persistNote
+            ? `${persistNote} Run history save failed (${detail}).`
+            : `Saved run locally, but run history save failed (${detail}).`
+        }
+      }
       saveLastOptimizationRun(
         {
           result,
@@ -242,7 +331,7 @@ export default function PortfolioSetupPage() {
           portfolioName: draft.portfolioName,
           referencePrices: draft.referencePrices,
           initialCapital: draft.initialCapital,
-          saveNote,
+          saveNote: persistNote,
           portfolioId,
         },
         userId,
@@ -387,10 +476,44 @@ export default function PortfolioSetupPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="min_variance">Minimum variance (lowest risk)</SelectItem>
-                    <SelectItem value="max_sharpe">Maximum Sharpe ratio (best return for its risk)</SelectItem>
+                    <SelectItem value="max_sharpe">
+                      Maximum Sharpe ratio (best return for its risk)
+                    </SelectItem>
+                    <SelectItem value="target_return">
+                      Target return (lowest risk for a return goal)
+                    </SelectItem>
+                    <SelectItem value="target_risk">
+                      Target risk (highest return under a volatility cap)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
+              {strategy === 'target_return' && (
+                <Field>
+                  <FieldLabel htmlFor="target-return">Target annual return (%)</FieldLabel>
+                  <Input
+                    id="target-return"
+                    value={targetReturn}
+                    placeholder={FIELD_HINTS.targetReturn}
+                    inputMode="decimal"
+                    onChange={(event) => setTargetReturn(event.target.value)}
+                  />
+                </Field>
+              )}
+              {strategy === 'target_risk' && (
+                <Field>
+                  <FieldLabel htmlFor="target-volatility">
+                    Target annual volatility (%)
+                  </FieldLabel>
+                  <Input
+                    id="target-volatility"
+                    value={targetVolatility}
+                    placeholder={FIELD_HINTS.targetVolatility}
+                    inputMode="decimal"
+                    onChange={(event) => setTargetVolatility(event.target.value)}
+                  />
+                </Field>
+              )}
               <Field>
                 <FieldLabel htmlFor="max-weight">Maximum weight per asset (%)</FieldLabel>
                 <Input

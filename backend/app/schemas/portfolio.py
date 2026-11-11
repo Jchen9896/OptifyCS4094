@@ -31,9 +31,12 @@ class PortfolioSetup(BaseModel):
     initial_capital: PositiveNumber
     start_date: date
     end_date: date
-    strategy: Literal["min_variance", "max_sharpe"]
+    strategy: Literal["min_variance", "max_sharpe", "target_return", "target_risk"]
     max_weight: float = Field(gt=0, le=1, allow_inf_nan=False)
     risk_free_rate: float = Field(allow_inf_nan=False)
+    # Yearly decimals. Only the matching target strategy requires its field.
+    target_return: float | None = Field(default=None, allow_inf_nan=False)
+    target_volatility: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     weights: dict[str, Weight]
     reference_prices: dict[str, PositiveNumber]
 
@@ -44,9 +47,13 @@ class PortfolioSetup(BaseModel):
         return "min_variance" if value in ("minvar", "mvo") else value
 
     @model_validator(mode="after")
-    def check_dates(self) -> "PortfolioSetup":
+    def check_dates_and_targets(self) -> "PortfolioSetup":
         if self.start_date >= self.end_date:
             raise ValueError("The start date must be before the end date.")
+        if self.strategy == "target_return" and self.target_return is None:
+            raise ValueError("Enter a target return for the target_return strategy.")
+        if self.strategy == "target_risk" and self.target_volatility is None:
+            raise ValueError("Enter a target volatility for the target_risk strategy.")
         return self
 
 

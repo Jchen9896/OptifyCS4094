@@ -16,6 +16,8 @@ type PortfolioSetup = {
   strategy: string
   max_weight: number
   risk_free_rate: number
+  target_return?: number | null
+  target_volatility?: number | null
   weights: Record<string, number>
   reference_prices: Record<string, number>
 }
@@ -33,6 +35,8 @@ export type PortfolioDraft = {
   strategy: string
   maxWeightPercent: number
   riskFreePercent: number
+  targetReturnPercent: number | null
+  targetVolatilityPercent: number | null
   holdings: Holding[]
   referencePrices: Record<string, number>
 }
@@ -66,11 +70,24 @@ export function buildPortfolioRequest(draft: PortfolioDraft) {
     prices[holding.symbol] = price
     return { symbol: holding.symbol, quantity }
   })
-  return { name, holdings, setup: {
-    initial_capital: draft.initialCapital, start_date: draft.startDate, end_date: draft.endDate,
-    strategy: draft.strategy, max_weight: draft.maxWeightPercent / 100,
-    risk_free_rate: draft.riskFreePercent / 100, weights, reference_prices: prices,
-  } }
+  return {
+    name,
+    holdings,
+    setup: {
+      initial_capital: draft.initialCapital,
+      start_date: draft.startDate,
+      end_date: draft.endDate,
+      strategy: draft.strategy,
+      max_weight: draft.maxWeightPercent / 100,
+      risk_free_rate: draft.riskFreePercent / 100,
+      target_return:
+        draft.targetReturnPercent == null ? null : draft.targetReturnPercent / 100,
+      target_volatility:
+        draft.targetVolatilityPercent == null ? null : draft.targetVolatilityPercent / 100,
+      weights,
+      reference_prices: prices,
+    },
+  }
 }
 
 export function listPortfolios(token: string): Promise<PortfolioSummary[]> {
@@ -99,13 +116,24 @@ export function restorePortfolio(saved: SavedPortfolio): PortfolioDraft {
   const setup = saved.setup
   if (!setup) throw new Error('This portfolio has no saved setup inputs. Its holdings are available through the portfolio API.')
   return {
-    portfolioName: saved.name, initialCapital: setup.initial_capital,
-    startDate: setup.start_date, endDate: setup.end_date, strategy: setup.strategy,
-    maxWeightPercent: setup.max_weight * 100, riskFreePercent: setup.risk_free_rate * 100,
+    portfolioName: saved.name,
+    initialCapital: setup.initial_capital,
+    startDate: setup.start_date,
+    endDate: setup.end_date,
+    strategy: setup.strategy,
+    maxWeightPercent: setup.max_weight * 100,
+    riskFreePercent: setup.risk_free_rate * 100,
+    targetReturnPercent:
+      setup.target_return == null ? null : setup.target_return * 100,
+    targetVolatilityPercent:
+      setup.target_volatility == null ? null : setup.target_volatility * 100,
     referencePrices: setup.reference_prices,
     holdings: saved.holdings.map((holding) => ({
-      symbol: holding.symbol, name: holding.name, quoteType: null,
-      quantity: Number(holding.quantity), weightPercent: setup.weights[holding.symbol],
+      symbol: holding.symbol,
+      name: holding.name,
+      quoteType: null,
+      quantity: Number(holding.quantity),
+      weightPercent: setup.weights[holding.symbol],
     })),
   }
 }

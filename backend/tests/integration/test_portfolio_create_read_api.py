@@ -137,14 +137,19 @@ def test_invalid_payload_and_missing_setup(api):
     assert saved.json()["holdings"] == []
 
 
-@pytest.mark.parametrize(("strategy", "expected"), [
-    ("min_variance", "min_variance"), ("max_sharpe", "max_sharpe"),
-    ("minvar", "min_variance"), ("mvo", "min_variance"),
+@pytest.mark.parametrize(("strategy", "expected", "targets"), [
+    ("min_variance", "min_variance", {}),
+    ("max_sharpe", "max_sharpe", {}),
+    ("target_return", "target_return", {"target_return": 0.08}),
+    ("target_risk", "target_risk", {"target_volatility": 0.12}),
+    ("minvar", "min_variance", {}),
+    ("mvo", "min_variance", {}),
 ])
-def test_save_and_read_keep_current_strategy_names(api, strategy, expected):
+def test_save_and_read_keep_current_strategy_names(api, strategy, expected, targets):
     client, owner, _engine = api
     body = payload()
     body["setup"]["strategy"] = strategy
+    body["setup"].update(targets)
     created = client.post("/api/portfolios", headers=owner, json=body)
     assert created.status_code == 201
     assert created.json()["setup"]["strategy"] == expected
