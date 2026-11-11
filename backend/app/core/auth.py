@@ -18,8 +18,21 @@ class ClerkIdentity:
 
 
 def _normalize_pem(value: str) -> str:
-    """Accept Windows CRLF and escaped newlines from Compose env files."""
-    return value.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n").strip()
+    """Accept Windows CRLF, escaped newlines, and quoted Compose env values."""
+    normalized = value.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if (normalized.startswith("'") and normalized.endswith("'")) or (
+        normalized.startswith('"') and normalized.endswith('"')
+    ):
+        normalized = normalized[1:-1].strip()
+    return normalized
+
+
+def _issuer_values(settings: Settings) -> list[str]:
+    """Clerk may emit the issuer with or without a trailing slash."""
+    base = settings.clerk_issuer.strip().rstrip("/")
+    if not base:
+        return []
+    return [base, f"{base}/"]
 
 
 def _authorized_party_allowed(azp: object, settings: Settings) -> bool:
@@ -28,7 +41,7 @@ def _authorized_party_allowed(azp: object, settings: Settings) -> bool:
         return True
     party = azp.rstrip("/")
     allowed = {origin.rstrip("/") for origin in settings.cors_origin_list}
-    allowed.add(settings.clerk_issuer.rstrip("/"))
+    allowed.update(value.rstrip("/") for value in _issuer_values(settings))
     return party in allowed
 
 
@@ -37,14 +50,15 @@ def get_clerk_identity(
     settings: Settings = Depends(get_settings),
 ) -> ClerkIdentity:
     unauthorized = HTTPException(status_code=401, detail="Invalid session")
-    if not credentials or not settings.clerk_issuer or not settings.clerk_jwt_key:
+    issuers = _issuer_values(settings)
+    if not credentials or not issuers or not settings.clerk_jwt_key:
         raise unauthorized
     try:
         claims = jwt.decode(
             credentials.credentials,
             _normalize_pem(settings.clerk_jwt_key),
             algorithms=["RS256"],
-            issuer=settings.clerk_issuer.rstrip("/"),
+            issuer=issuers,
             options={"require": ["exp", "iat", "iss", "sub"]},
         )
     except jwt.PyJWTError as exc:
