@@ -9,6 +9,8 @@ import LearnArticlePage from '../features/learn/LearnArticlePage.tsx'
 import LearnPage from '../features/learn/LearnPage.tsx'
 import { ActivePortfolioProvider } from '../features/portfolio/ActivePortfolioContext.tsx'
 import PortfolioSetupPage from '../features/portfolio/PortfolioSetupPage.tsx'
+import SettingsPage from '../features/settings/SettingsPage.tsx'
+import TradePage from '../features/trade/TradePage.tsx'
 
 function RequireAuth() {
   const { isLoaded, isSignedIn } = useAuth()
@@ -63,8 +65,10 @@ export function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="setup" element={<PortfolioSetupPage />} />
           <Route path="compare" element={<ComparePage />} />
+          <Route path="trade" element={<TradePage />} />
           <Route path="learn" element={<LearnPage />} />
           <Route path="learn/:slug" element={<LearnArticlePage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>
