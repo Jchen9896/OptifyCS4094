@@ -8,12 +8,15 @@ import DashboardPage from '../features/dashboard/DashboardPage.tsx'
 import LearnArticlePage from '../features/learn/LearnArticlePage.tsx'
 import LearnPage from '../features/learn/LearnPage.tsx'
 import { ActivePortfolioProvider } from '../features/portfolio/ActivePortfolioContext.tsx'
+import PortfolioAnalysisPage from '../features/portfolio/PortfolioAnalysisPage.tsx'
 import PortfolioSetupPage from '../features/portfolio/PortfolioSetupPage.tsx'
+import SettingsPage from '../features/settings/SettingsPage.tsx'
+import TradePage from '../features/trade/TradePage.tsx'
 
 function RequireAuth() {
   const { isLoaded, isSignedIn } = useAuth()
   if (!isLoaded) {
-    return <p className="p-8 text-sm text-muted-foreground">Checking session?</p>
+    return <p className="p-8 text-sm text-muted-foreground">Checking session…</p>
   }
   if (!isSignedIn) {
     return <Navigate to="/login" replace />
@@ -24,7 +27,7 @@ function RequireAuth() {
 function RedirectIfSignedIn({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth()
   if (!isLoaded) {
-    return <p className="p-8 text-sm text-muted-foreground">Checking session?</p>
+    return <p className="p-8 text-sm text-muted-foreground">Checking session…</p>
   }
   if (isSignedIn) {
     return <Navigate to="/" replace />
@@ -62,9 +65,12 @@ export function AppRoutes() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="setup" element={<PortfolioSetupPage />} />
+          <Route path="analyze" element={<PortfolioAnalysisPage />} />
           <Route path="compare" element={<ComparePage />} />
+          <Route path="trade" element={<TradePage />} />
           <Route path="learn" element={<LearnPage />} />
           <Route path="learn/:slug" element={<LearnArticlePage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

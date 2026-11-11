@@ -93,7 +93,13 @@ def test_create_list_and_detail_survive_separate_requests(api):
     saved = response.json()
     assert saved["name"] == "Core"
     assert saved["holdings"][0] == {"symbol": "AAPL", "name": "Apple Inc.", "quantity": "10.5"}
-    assert saved["setup"] == payload()["setup"]
+    expected_setup = {
+        **payload()["setup"],
+        "target_return": None,
+        "target_volatility": None,
+        "quote_types": None,
+    }
+    assert saved["setup"] == expected_setup
     read = client.get(f'/api/portfolios/{saved["id"]}', headers=owner)
     assert read.status_code == 200
     assert read.json()["setup"] == saved["setup"]
