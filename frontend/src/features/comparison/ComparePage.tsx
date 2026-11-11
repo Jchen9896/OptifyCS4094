@@ -55,14 +55,37 @@ import {
 import { useActivePortfolio } from '../portfolio/ActivePortfolioContext.tsx'
 
 const equityConfig = {
-  a: { label: 'Run A', color: 'var(--chart-2)' },
-  b: { label: 'Run B', color: 'var(--chart-1)' },
+  a: { label: 'Side A', color: 'var(--chart-2)' },
+  b: { label: 'Side B', color: 'var(--chart-1)' },
 } satisfies ChartConfig
 
 const riskConfig = {
-  a: { label: 'Run A', color: 'var(--chart-2)' },
-  b: { label: 'Run B', color: 'var(--chart-1)' },
+  a: { label: 'Side A', color: 'var(--chart-2)' },
+  b: { label: 'Side B', color: 'var(--chart-1)' },
 } satisfies ChartConfig
+
+type DistributionMode = 'optimized' | 'original'
+
+type SideSelection = {
+  runId: string
+  mode: DistributionMode
+}
+
+type CompareSide = {
+  runId: string
+  mode: DistributionMode
+  label: string
+  strategy: string
+  periodStart: string
+  periodEnd: string
+  expectedReturn: number
+  volatility: number
+  sharpeRatio: number
+  weights: Record<string, number>
+  equityKey: 'current_value' | 'optimized_value'
+  equityCurve: OptimizationRunDetail['result']['equity_curve']
+  hasOriginal: boolean
+}
 
 function formatMetric(value: number | undefined, asPercent: boolean): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
@@ -83,14 +106,13 @@ function formatDelta(a: number | undefined, b: number | undefined, asPercent: bo
   return asPercent ? `${sign}${(delta * 100).toFixed(2)} pp` : `${sign}${delta.toFixed(2)}`
 }
 
-function formatRunLabel(run: OptimizationRunSummary): string {
-  const when = new Date(run.created_at).toLocaleString(undefined, {
+function formatRunWhen(run: OptimizationRunSummary): string {
+  return new Date(run.created_at).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   })
-  return `${when} · ${run.strategy} · ${run.period_start} → ${run.period_end}`
 }
 
 function formatCurrency(value: number): string {
@@ -101,6 +123,85 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
+function encodeSelection(selection: SideSelection): string {
+  return `${selection.runId}::${selection.mode}`
+}
+
+function parseSelection(value: string | null | undefined): SideSelection | null {
+  if (!value) return null
+  const [runId, mode] = value.split('::')
+  if (!runId || (mode !== 'optimized' && mode !== 'original')) return null
+  return { runId, mode }
+}
+
+function runHasOriginal(detail: OptimizationRunDetail): boolean {
+  const weights = detail.params.current_weights
+  return Array.isArray(weights) && weights.length === detail.params.tickers.length
+}
+
+function weightsFromCurrent(detail: OptimizationRunDetail): Record<string, number> {
+  const list = detail.params.current_weights ?? []
+  return Object.fromEntries(
+    detail.params.tickers.map((ticker, index) => [ticker, list[index] ?? 0]),
+  )
+}
+
+function buildCompareSide(detail: OptimizationRunDetail, mode: DistributionMode): CompareSide {
+  const hasOriginal = runHasOriginal(detail)
+  const useOriginal = mode === 'original' && hasOriginal
+  const when = new Date(detail.created_at).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return {
+    runId: detail.id,
+    mode: useOriginal ? 'original' : 'optimized',
+    label: useOriginal
+      ? `Original · ${when} · ${detail.result.period_start} → ${detail.result.period_end}`
+      : `Optimized · ${when} · ${detail.params.strategy} · ${detail.result.period_start} → ${detail.result.period_end}`,
+    strategy: useOriginal ? 'Original allocation' : detail.result.strategy,
+    periodStart: detail.result.period_start,
+    periodEnd: detail.result.period_end,
+    expectedReturn: useOriginal
+      ? detail.result.current_expected_return
+      : detail.result.expected_return,
+    volatility: useOriginal ? detail.result.current_volatility : detail.result.volatility,
+    sharpeRatio: useOriginal
+      ? detail.result.current_sharpe_ratio
+      : detail.result.sharpe_ratio,
+    weights: useOriginal ? weightsFromCurrent(detail) : detail.result.weights,
+    equityKey: useOriginal ? 'current_value' : 'optimized_value',
+    equityCurve: detail.result.equity_curve,
+    hasOriginal,
+  }
+}
+
+function defaultSelections(
+  rows: OptimizationRunSummary[],
+  samePortfolio: boolean,
+  side: 'a' | 'b',
+): string {
+  if (!rows.length) return ''
+  if (samePortfolio && rows.length === 1) {
+    return encodeSelection({
+      runId: rows[0].id,
+      mode: side === 'a' ? 'original' : 'optimized',
+    })
+  }
+  if (samePortfolio && side === 'b' && rows.length > 1) {
+    return encodeSelection({ runId: rows[1].id, mode: 'optimized' })
+  }
+  return encodeSelection({ runId: rows[0].id, mode: 'optimized' })
+}
+
+function selectionStillValid(value: string, rows: OptimizationRunSummary[]): boolean {
+  const parsed = parseSelection(value)
+  if (!parsed) return false
+  return rows.some((row) => row.id === parsed.runId)
+}
+
 export default function ComparePage() {
   const { getToken } = useAuth()
   const { portfolios, activeId } = useActivePortfolio()
@@ -108,8 +209,8 @@ export default function ComparePage() {
   const [portfolioB, setPortfolioB] = useState<string>('')
   const [runsA, setRunsA] = useState<OptimizationRunSummary[]>([])
   const [runsB, setRunsB] = useState<OptimizationRunSummary[]>([])
-  const [runIdA, setRunIdA] = useState<string>('')
-  const [runIdB, setRunIdB] = useState<string>('')
+  const [selectionA, setSelectionA] = useState<string>('')
+  const [selectionB, setSelectionB] = useState<string>('')
   const [detailA, setDetailA] = useState<OptimizationRunDetail | null>(null)
   const [detailB, setDetailB] = useState<OptimizationRunDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -121,15 +222,19 @@ export default function ComparePage() {
     return value
   }, [getToken])
 
+  const parsedA = parseSelection(selectionA)
+  const parsedB = parseSelection(selectionB)
+
   useEffect(() => {
     if (!portfolios.length) {
       setPortfolioA('')
       setPortfolioB('')
       return
     }
-    const preferred = activeId && portfolios.some((row) => row.id === activeId)
-      ? activeId
-      : portfolios[0].id
+    const preferred =
+      activeId && portfolios.some((row) => row.id === activeId)
+        ? activeId
+        : portfolios[0].id
     setPortfolioA((current) => current || preferred)
     setPortfolioB((current) => current || preferred)
   }, [portfolios, activeId])
@@ -137,7 +242,7 @@ export default function ComparePage() {
   useEffect(() => {
     if (!portfolioA) {
       setRunsA([])
-      setRunIdA('')
+      setSelectionA('')
       return
     }
     let cancelled = false
@@ -146,13 +251,15 @@ export default function ComparePage() {
         const rows = await listOptimizationRuns(portfolioA, await token())
         if (cancelled) return
         setRunsA(rows)
-        setRunIdA((current) =>
-          current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? '',
+        setSelectionA((current) =>
+          selectionStillValid(current, rows)
+            ? current
+            : defaultSelections(rows, portfolioA === portfolioB, 'a'),
         )
       } catch (caught) {
         if (!cancelled) {
           setRunsA([])
-          setRunIdA('')
+          setSelectionA('')
           setError(
             caught instanceof ApiError
               ? `${caught.code}: ${caught.message}`
@@ -166,12 +273,12 @@ export default function ComparePage() {
     return () => {
       cancelled = true
     }
-  }, [portfolioA, token])
+  }, [portfolioA, portfolioB, token])
 
   useEffect(() => {
     if (!portfolioB) {
       setRunsB([])
-      setRunIdB('')
+      setSelectionB('')
       return
     }
     let cancelled = false
@@ -180,15 +287,15 @@ export default function ComparePage() {
         const rows = await listOptimizationRuns(portfolioB, await token())
         if (cancelled) return
         setRunsB(rows)
-        setRunIdB((current) => {
-          if (current && rows.some((row) => row.id === current)) return current
-          if (portfolioA === portfolioB && rows.length > 1) return rows[1].id
-          return rows[0]?.id ?? ''
-        })
+        setSelectionB((current) =>
+          selectionStillValid(current, rows)
+            ? current
+            : defaultSelections(rows, portfolioA === portfolioB, 'b'),
+        )
       } catch (caught) {
         if (!cancelled) {
           setRunsB([])
-          setRunIdB('')
+          setSelectionB('')
           setError(
             caught instanceof ApiError
               ? `${caught.code}: ${caught.message}`
@@ -205,7 +312,7 @@ export default function ComparePage() {
   }, [portfolioB, portfolioA, token])
 
   useEffect(() => {
-    if (!portfolioA || !runIdA || !portfolioB || !runIdB) {
+    if (!portfolioA || !parsedA || !portfolioB || !parsedB) {
       setDetailA(null)
       setDetailB(null)
       return
@@ -217,12 +324,18 @@ export default function ComparePage() {
       try {
         const auth = await token()
         const [a, b] = await Promise.all([
-          readOptimizationRun(portfolioA, runIdA, auth),
-          readOptimizationRun(portfolioB, runIdB, auth),
+          readOptimizationRun(portfolioA, parsedA.runId, auth),
+          readOptimizationRun(portfolioB, parsedB.runId, auth),
         ])
         if (cancelled) return
         setDetailA(a)
         setDetailB(b)
+        if (parsedA.mode === 'original' && !runHasOriginal(a)) {
+          setSelectionA(encodeSelection({ runId: a.id, mode: 'optimized' }))
+        }
+        if (parsedB.mode === 'original' && !runHasOriginal(b)) {
+          setSelectionB(encodeSelection({ runId: b.id, mode: 'optimized' }))
+        }
       } catch (caught) {
         if (!cancelled) {
           setDetailA(null)
@@ -242,75 +355,84 @@ export default function ComparePage() {
     return () => {
       cancelled = true
     }
-  }, [portfolioA, runIdA, portfolioB, runIdB, token])
+  }, [portfolioA, parsedA?.runId, parsedA?.mode, portfolioB, parsedB?.runId, parsedB?.mode, token])
+
+  const sideA = useMemo(
+    () => (detailA && parsedA ? buildCompareSide(detailA, parsedA.mode) : null),
+    [detailA, parsedA],
+  )
+  const sideB = useMemo(
+    () => (detailB && parsedB ? buildCompareSide(detailB, parsedB.mode) : null),
+    [detailB, parsedB],
+  )
 
   const periodAligned = Boolean(
-    detailA &&
-      detailB &&
-      detailA.result.period_start === detailB.result.period_start &&
-      detailA.result.period_end === detailB.result.period_end,
+    sideA &&
+      sideB &&
+      sideA.periodStart === sideB.periodStart &&
+      sideA.periodEnd === sideB.periodEnd,
   )
 
   const metrics = useMemo(() => {
-    if (!detailA || !detailB) return []
+    if (!sideA || !sideB) return []
     return [
       {
         label: 'Annualized return',
-        explanation: 'Expected yearly return from the stored optimization result',
-        a: detailA.result.expected_return,
-        b: detailB.result.expected_return,
+        explanation: 'Expected yearly return for the selected distribution',
+        a: sideA.expectedReturn,
+        b: sideB.expectedReturn,
         asPercent: true,
       },
       {
         label: 'Annualized volatility',
-        explanation: 'Yearly standard deviation of returns from the stored result',
-        a: detailA.result.volatility,
-        b: detailB.result.volatility,
+        explanation: 'Yearly standard deviation of returns for the selected distribution',
+        a: sideA.volatility,
+        b: sideB.volatility,
         asPercent: true,
       },
       {
         label: 'Sharpe ratio',
         explanation: 'Return per unit of risk after the risk-free rate',
-        a: detailA.result.sharpe_ratio,
-        b: detailB.result.sharpe_ratio,
+        a: sideA.sharpeRatio,
+        b: sideB.sharpeRatio,
         asPercent: false,
       },
     ]
-  }, [detailA, detailB])
+  }, [sideA, sideB])
 
   const weightRows = useMemo(() => {
-    if (!detailA || !detailB) return []
+    if (!sideA || !sideB) return []
     const symbols = Array.from(
-      new Set([...Object.keys(detailA.result.weights), ...Object.keys(detailB.result.weights)]),
+      new Set([...Object.keys(sideA.weights), ...Object.keys(sideB.weights)]),
     ).sort()
     return symbols.map((symbol) => ({
       symbol,
-      a: detailA.result.weights[symbol] ?? 0,
-      b: detailB.result.weights[symbol] ?? 0,
+      a: sideA.weights[symbol] ?? 0,
+      b: sideB.weights[symbol] ?? 0,
     }))
-  }, [detailA, detailB])
+  }, [sideA, sideB])
 
   const equityData = useMemo(() => {
-    if (!detailA || !detailB || !periodAligned) return []
+    if (!sideA || !sideB || !periodAligned) return []
     const byDate = new Map<string, { date: string; a?: number; b?: number }>()
-    for (const point of detailA.result.equity_curve) {
-      byDate.set(point.date, { date: point.date, a: point.optimized_value })
+    for (const point of sideA.equityCurve) {
+      byDate.set(point.date, { date: point.date, a: point[sideA.equityKey] })
     }
-    for (const point of detailB.result.equity_curve) {
+    for (const point of sideB.equityCurve) {
       const row = byDate.get(point.date) ?? { date: point.date }
-      row.b = point.optimized_value
+      row.b = point[sideB.equityKey]
       byDate.set(point.date, row)
     }
     return Array.from(byDate.values()).sort((left, right) => left.date.localeCompare(right.date))
-  }, [detailA, detailB, periodAligned])
+  }, [sideA, sideB, periodAligned])
 
   const riskPoints = useMemo(() => {
-    if (!detailA || !detailB) return { a: [], b: [] }
+    if (!sideA || !sideB) return { a: [], b: [] }
     return {
-      a: [{ x: detailA.result.volatility * 100, y: detailA.result.expected_return * 100 }],
-      b: [{ x: detailB.result.volatility * 100, y: detailB.result.expected_return * 100 }],
+      a: [{ x: sideA.volatility * 100, y: sideA.expectedReturn * 100 }],
+      b: [{ x: sideB.volatility * 100, y: sideB.expectedReturn * 100 }],
     }
-  }, [detailA, detailB])
+  }, [sideA, sideB])
 
   const portfolioName = (id: string) => portfolios.find((row) => row.id === id)?.name ?? 'Portfolio'
 
@@ -336,8 +458,8 @@ export default function ComparePage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Place two saved optimization runs side by side. Prefer runs that share the same
-          historical period.
+          Place two sides side by side — optimized run weights or the original allocation stored
+          with a run. Prefer selections that share the same historical period.
         </p>
       </div>
 
@@ -375,68 +497,97 @@ export default function ComparePage() {
               </Select>
             </Field>
             <Field>
-              <FieldLabel>Run A</FieldLabel>
-              <Select value={runIdA} onValueChange={setRunIdA} disabled={!runsA.length}>
+              <FieldLabel>Side A</FieldLabel>
+              <Select
+                value={selectionA}
+                onValueChange={(value) => setSelectionA(value ?? '')}
+                disabled={!runsA.length}
+              >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={runsA.length ? 'Select run' : 'No saved runs'} />
+                  <SelectValue placeholder={runsA.length ? 'Select distribution' : 'No saved runs'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {runsA.map((row) => (
-                    <SelectItem key={row.id} value={row.id}>
-                      {formatRunLabel(row)}
-                    </SelectItem>
-                  ))}
+                  {runsA.flatMap((row) => [
+                    <SelectItem
+                      key={`${row.id}-original`}
+                      value={encodeSelection({ runId: row.id, mode: 'original' })}
+                    >
+                      Original allocation · {formatRunWhen(row)} · {row.period_start} →{' '}
+                      {row.period_end}
+                    </SelectItem>,
+                    <SelectItem
+                      key={`${row.id}-optimized`}
+                      value={encodeSelection({ runId: row.id, mode: 'optimized' })}
+                    >
+                      Optimized · {formatRunWhen(row)} · {row.strategy} · {row.period_start} →{' '}
+                      {row.period_end}
+                    </SelectItem>,
+                  ])}
                 </SelectContent>
               </Select>
             </Field>
             <Field>
-              <FieldLabel>Run B</FieldLabel>
-              <Select value={runIdB} onValueChange={setRunIdB} disabled={!runsB.length}>
+              <FieldLabel>Side B</FieldLabel>
+              <Select
+                value={selectionB}
+                onValueChange={(value) => setSelectionB(value ?? '')}
+                disabled={!runsB.length}
+              >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={runsB.length ? 'Select run' : 'No saved runs'} />
+                  <SelectValue placeholder={runsB.length ? 'Select distribution' : 'No saved runs'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {runsB.map((row) => (
-                    <SelectItem key={row.id} value={row.id}>
-                      {formatRunLabel(row)}
-                    </SelectItem>
-                  ))}
+                  {runsB.flatMap((row) => [
+                    <SelectItem
+                      key={`${row.id}-original`}
+                      value={encodeSelection({ runId: row.id, mode: 'original' })}
+                    >
+                      Original allocation · {formatRunWhen(row)} · {row.period_start} →{' '}
+                      {row.period_end}
+                    </SelectItem>,
+                    <SelectItem
+                      key={`${row.id}-optimized`}
+                      value={encodeSelection({ runId: row.id, mode: 'optimized' })}
+                    >
+                      Optimized · {formatRunWhen(row)} · {row.strategy} · {row.period_start} →{' '}
+                      {row.period_end}
+                    </SelectItem>,
+                  ])}
                 </SelectContent>
               </Select>
             </Field>
           </div>
-          {detailA && detailB ? (
+          {sideA && sideB ? (
             <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
               <p className="font-medium text-foreground">Historical period</p>
               {periodAligned ? (
                 <p className="mt-1">
-                  Shared period {detailA.result.period_start} → {detailA.result.period_end} · Daily
-                  adjusted closes
+                  Shared period {sideA.periodStart} → {sideA.periodEnd} · Daily adjusted closes
                 </p>
               ) : (
                 <p className="mt-1 text-amber-700 dark:text-amber-400">
-                  Periods differ. Run A: {detailA.result.period_start} → {detailA.result.period_end}.
-                  Run B: {detailB.result.period_start} → {detailB.result.period_end}. Metrics stay
-                  side by side; equity overlay needs a shared period.
+                  Periods differ. Side A: {sideA.periodStart} → {sideA.periodEnd}. Side B:{' '}
+                  {sideB.periodStart} → {sideB.periodEnd}. Metrics stay side by side; equity overlay
+                  needs a shared period.
                 </p>
               )}
               <p className="mt-2 text-xs">
-                {portfolioName(portfolioA)} vs {portfolioName(portfolioB)} · Results from stored
-                optimization runs
+                {portfolioName(portfolioA)} ({sideA.strategy}) vs {portfolioName(portfolioB)} (
+                {sideB.strategy})
               </p>
             </div>
           ) : (
             <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
               {loading
-                ? 'Loading selected runs…'
-                : 'Select two saved runs. If a portfolio has no runs yet, edit it from the dashboard, run analysis, then return here.'}
+                ? 'Loading selected sides…'
+                : 'Select two sides. Use Original allocation to compare against holdings stored with a run, or Optimized for the solver result.'}
             </div>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
 
-      {detailA && detailB && (
+      {sideA && sideB && (
         <>
           <Card>
             <CardHeader>
@@ -444,7 +595,7 @@ export default function ComparePage() {
                 <div>
                   <CardTitle>Aligned metric comparison</CardTitle>
                   <CardDescription>
-                    Stored expected return, volatility, and Sharpe for each run
+                    Expected return, volatility, and Sharpe for each selected distribution
                   </CardDescription>
                 </div>
                 <Badge variant="secondary">{periodAligned ? 'Shared period' : 'Mixed periods'}</Badge>
@@ -455,8 +606,8 @@ export default function ComparePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Metric</TableHead>
-                    <TableHead>Run A</TableHead>
-                    <TableHead>Run B</TableHead>
+                    <TableHead>Side A</TableHead>
+                    <TableHead>Side B</TableHead>
                     <TableHead>Difference (B − A)</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -533,7 +684,7 @@ export default function ComparePage() {
                 <CardTitle>Historical performance</CardTitle>
                 <CardDescription>
                   {periodAligned
-                    ? 'Optimized equity curves on the shared period'
+                    ? 'Equity curves for the selected distributions on the shared period'
                     : 'Overlay available only when periods match'}
                 </CardDescription>
               </CardHeader>
@@ -584,7 +735,7 @@ export default function ComparePage() {
                   </ChartContainer>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Choose two runs with the same period start and end to overlay capital paths.
+                    Choose two sides with the same period start and end to overlay capital paths.
                   </p>
                 )}
               </CardContent>
@@ -594,15 +745,19 @@ export default function ComparePage() {
           <Card>
             <CardHeader>
               <CardTitle>Asset-level weights</CardTitle>
-              <CardDescription>Optimized weights from each stored run</CardDescription>
+              <CardDescription>
+                {sideA.mode === 'original' || sideB.mode === 'original'
+                  ? 'Original and/or optimized weights from the selected sides'
+                  : 'Optimized weights from each selected run'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Symbol</TableHead>
-                    <TableHead>Run A</TableHead>
-                    <TableHead>Run B</TableHead>
+                    <TableHead>Side A</TableHead>
+                    <TableHead>Side B</TableHead>
                     <TableHead>Difference</TableHead>
                   </TableRow>
                 </TableHeader>
