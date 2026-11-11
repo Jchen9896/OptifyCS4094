@@ -56,15 +56,15 @@ function userInitials(email: string | undefined, firstName: string | null | unde
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
+    'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
     isActive
-      ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-      : 'text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+      ? 'bg-sidebar-primary font-medium text-sidebar-primary-foreground'
+      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
   )
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
+    <p className="mb-2 px-3 text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
       {children}
     </p>
   )
@@ -83,24 +83,17 @@ export default function AppShell() {
   return (
     <div className="min-h-svh bg-background">
       <aside
-        className="fixed inset-y-0 left-0 z-20 flex flex-col border-r border-border bg-sidebar px-5 py-6 text-sidebar-foreground"
+        className="fixed inset-y-0 left-0 z-20 flex flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground"
         style={{ width: SIDEBAR_WIDTH_PX }}
       >
-        <div className="mb-8 flex shrink-0 items-center gap-2.5">
-          <span
-            className="inline-block size-7 rounded-md"
-            style={{
-              background: 'linear-gradient(135deg, #68c3d4 0%, #ffe8d1 100%)',
-            }}
-          />
-          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">
-            Optify
-          </span>
+        <div className="mb-8 flex shrink-0 items-center gap-2.5 px-2">
+          <span className="inline-block size-6 rounded-md bg-primary" />
+          <span className="text-base font-semibold tracking-tight text-foreground">Optify</span>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <SectionLabel>Portfolio</SectionLabel>
-          <nav className="flex flex-col gap-1">
+          <nav className="flex flex-col gap-0.5">
             <NavLink to="/" end className={navLinkClass}>
               <LayoutDashboard className="size-4" />
               Dashboard
@@ -119,9 +112,9 @@ export default function AppShell() {
             </NavLink>
           </nav>
 
-          <div className="mt-8">
+          <div className="mt-7">
             <SectionLabel>Trade</SectionLabel>
-            <nav className="flex flex-col gap-1">
+            <nav className="flex flex-col gap-0.5">
               <NavLink to="/trade" className={navLinkClass}>
                 <CandlestickChart className="size-4" />
                 Trade
@@ -129,9 +122,9 @@ export default function AppShell() {
             </nav>
           </div>
 
-          <div className="mt-8">
+          <div className="mt-7">
             <SectionLabel>Learn</SectionLabel>
-            <nav className="flex flex-col gap-1">
+            <nav className="flex flex-col gap-0.5">
               <NavLink
                 to="/learn"
                 className={({ isActive }) =>
@@ -147,45 +140,43 @@ export default function AppShell() {
           </div>
         </div>
 
-        <div className="mt-4 shrink-0 border-t border-sidebar-border pt-4">
+        <div className="mt-4 shrink-0 border-t border-sidebar-border pt-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[state=open]:bg-sidebar-primary data-[state=open]:text-sidebar-primary-foreground"
+                className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[state=open]:bg-sidebar-accent"
               >
                 <Avatar size="sm">
-                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground data-[state=open]:bg-sidebar-primary-foreground/15">
-                    {initials}
-                  </AvatarFallback>
+                  <AvatarFallback className="bg-muted text-foreground">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{email ?? 'Signed in'}</p>
-                  <p className="truncate text-xs opacity-70">{activeLabel}</p>
+                  <p className="truncate text-sm font-medium text-foreground">{email ?? 'Signed in'}</p>
+                  <p className="truncate text-xs text-muted-foreground">{activeLabel}</p>
                 </div>
-                <Settings className="size-4 shrink-0 opacity-70" />
+                <Settings className="size-4 shrink-0 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               side="top"
               align="start"
               sideOffset={8}
-              className="w-[min(100vw-2rem,16.5rem)] border-0 bg-sidebar-primary p-1.5 text-sidebar-primary-foreground shadow-md ring-0"
+              className="w-[min(100vw-2rem,16.5rem)] border border-border bg-popover p-1.5 text-popover-foreground shadow-sm"
             >
-              <DropdownMenuLabel className="px-2.5 py-2 font-normal text-sidebar-primary-foreground">
+              <DropdownMenuLabel className="px-2.5 py-2 font-normal">
                 <p className="truncate text-sm font-medium">{email ?? 'Signed in'}</p>
-                <p className="truncate text-xs opacity-75">{activeLabel}</p>
+                <p className="truncate text-xs text-muted-foreground">{activeLabel}</p>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-sidebar-primary-foreground/20" />
+              <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer rounded-md px-2.5 py-2 text-sidebar-primary-foreground focus:bg-sidebar-primary-foreground/15 focus:text-sidebar-primary-foreground"
+                className="cursor-pointer rounded-md px-2.5 py-2"
                 onSelect={() => navigate('/settings')}
               >
                 <Settings className="size-4" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuItem
-                className="cursor-pointer rounded-md px-2.5 py-2 text-sidebar-primary-foreground focus:bg-sidebar-primary-foreground/15 focus:text-sidebar-primary-foreground"
+                className="cursor-pointer rounded-md px-2.5 py-2"
                 onSelect={() => void signOut()}
               >
                 <LogOut className="size-4" />
@@ -200,7 +191,7 @@ export default function AppShell() {
         className="flex min-h-svh min-w-0 flex-col bg-background"
         style={{ paddingLeft: SIDEBAR_WIDTH_PX }}
       >
-        <header className="flex h-20 shrink-0 items-center px-8">
+        <header className="flex h-14 shrink-0 items-center border-b border-border bg-card px-8">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
@@ -208,12 +199,12 @@ export default function AppShell() {
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>{page}</BreadcrumbPage>
+                <BreadcrumbPage className="font-medium text-foreground">{page}</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </header>
-        <main className="flex-1 px-8 py-8">
+        <main className="flex-1 px-8 py-7">
           <Outlet />
         </main>
       </div>
