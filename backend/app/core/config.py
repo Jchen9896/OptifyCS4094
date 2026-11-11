@@ -8,6 +8,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg2://optify:optify@localhost:5432/optify"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    clerk_issuer: str = ""
+    clerk_jwt_key: str = ""
     market_data_interval: str = "1d"
     market_data_auto_adjust: bool = True
     market_data_search_limit: int = 10
