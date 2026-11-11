@@ -123,6 +123,25 @@ def test_run_returns_weights_and_metrics():
     assert [row.symbol for row in result.asset_stats] == ["AAA", "BBB"]
     assert all(row.annualized_return is not None for row in result.asset_stats)
     assert all(row.annualized_volatility is not None for row in result.asset_stats)
+    assert "Required holdings: none." in result.assumptions
+
+
+def test_run_honors_required_min_weights():
+    # Unconstrained min-variance already keeps AAA above a small floor on this fixture,
+    # so assert the contract (≥ floor) and the assumptions line rather than equality.
+    result = _service(FakeReader(_two_stock_batch())).run(
+        ["AAA", "BBB"],
+        date(2026, 9, 1),
+        date(2026, 9, 4),
+        strategy="min_variance",
+        max_weight=None,
+        risk_free_rate=0.04,
+        current_weights=[0.5, 0.5],
+        min_weights=[0.25, 0.0],
+    )
+
+    assert result.weights["AAA"] >= 0.25 - TOLERANCE
+    assert "Required holdings: AAA ≥ 25%." in result.assumptions
 
 
 def test_run_uses_request_initial_capital():

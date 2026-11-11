@@ -25,6 +25,8 @@ class OptimizationRequest(BaseModel):
     initial_capital: float | None = Field(default=None, gt=0)
     # Current portfolio weights in ticker order (decimals that sum to 1). Used for charts.
     current_weights: list[float] | None = None
+    # Per-ticker minimum weights (decimals). Use >0 to keep a stock in the optimized mix.
+    min_weights: list[float] | None = None
 
 
 class OptimizerInput(BaseModel):

@@ -77,6 +77,7 @@ class OptimizationService:
         initial_capital: float | None = None,
         target_return: float | None = None,
         target_volatility: float | None = None,
+        min_weights: list[float] | None = None,
     ) -> OptimizationResult:
         """Optimize weights for `tickers` over the stored history in the date range.
 
@@ -150,6 +151,20 @@ class OptimizationService:
             years,
             risk_free,
         )
+        floors: np.ndarray | None = None
+        if min_weights is not None:
+            if len(min_weights) != len(normalized):
+                raise InvalidOptimizationInputError(
+                    "min_weights must have one value for each ticker, in ticker order."
+                )
+            floors = np.asarray([float(value) for value in min_weights], dtype=float)
+            if np.any(~np.isfinite(floors)):
+                raise InvalidOptimizationInputError("min_weights must be finite.")
+            if np.any(floors < 0):
+                raise InvalidOptimizationInputError("min_weights cannot be negative.")
+            if np.any(floors > 1 + self._tolerance):
+                raise InvalidOptimizationInputError("min_weights cannot exceed 100%.")
+
         weights = selected.compute_weights(
             expected,
             covariance,
@@ -157,6 +172,7 @@ class OptimizationService:
             risk_free,
             target_return=target_return,
             target_volatility=target_volatility,
+            min_weights=floors,
         )
         expected_return, volatility, sharpe_ratio = _portfolio_metrics(
             weights, expected, covariance, risk_free
@@ -202,12 +218,24 @@ class OptimizationService:
             )
 
         cap = "None" if max_weight is None else f"{max_weight * 100:g}%"
+        required = []
+        if floors is not None:
+            required = [
+                f"{ticker} ≥ {floor * 100:g}%"
+                for ticker, floor in zip(normalized, floors)
+                if floor > 0
+            ]
         assumptions = [
             *stats.assumptions,
             *self._return_estimator.assumptions(years),
             f"Price source: {batch.source}; interval {batch.interval}; basis {batch.adjustment_basis}.",
             f"Strategy: {selected.name} (long-only weights sum to 100%).",
             f"Maximum weight per stock: {cap}.",
+            (
+                f"Required holdings: {', '.join(required)}."
+                if required
+                else "Required holdings: none."
+            ),
             *selected.assumptions(target_return=target_return, target_volatility=target_volatility),
             f"Risk-free rate: {risk_free:g} (annual decimal).",
             f"Capital chart starts at {capital:g} with buy-and-hold weights.",
