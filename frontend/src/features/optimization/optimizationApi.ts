@@ -20,6 +20,12 @@ export type EquityCurvePoint = {
   optimized_value: number
 }
 
+export type AssetStat = {
+  symbol: string
+  annualized_return: number | null
+  annualized_volatility: number | null
+}
+
 export type OptimizationResult = {
   strategy: string
   weights: Record<string, number>
@@ -34,6 +40,7 @@ export type OptimizationResult = {
   assumptions: string[]
   initial_capital: number
   equity_curve: EquityCurvePoint[]
+  asset_stats?: AssetStat[]
 }
 
 export type StoredOptimizationRun = {

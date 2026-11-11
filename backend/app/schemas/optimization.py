@@ -51,6 +51,15 @@ class EquityCurvePointSchema(BaseModel):
     optimized_value: float
 
 
+class AssetStatSchema(BaseModel):
+    """Historical annualized stats for one ticker over the optimization period."""
+
+    symbol: str
+    # Null when the annualized statistic is not finite (unavailable), never a fake zero.
+    annualized_return: float | None
+    annualized_volatility: float | None
+
+
 class OptimizationResult(BaseModel):
     """A successful optimization run."""
 
@@ -67,3 +76,4 @@ class OptimizationResult(BaseModel):
     assumptions: list[str]
     initial_capital: float
     equity_curve: list[EquityCurvePointSchema]
+    asset_stats: list[AssetStatSchema] = Field(default_factory=list)

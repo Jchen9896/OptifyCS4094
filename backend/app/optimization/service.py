@@ -17,7 +17,12 @@ from app.optimization.mean_variance import (
 )
 from app.optimization.validation import validate_optimizer_input
 from app.repositories.price_repository import PriceRepository
-from app.schemas.optimization import EquityCurvePointSchema, OptimizationResult, OptimizerInput
+from app.schemas.optimization import (
+    AssetStatSchema,
+    EquityCurvePointSchema,
+    OptimizationResult,
+    OptimizerInput,
+)
 from app.services.calculation_service import calculate_portfolio_statistics
 from app.services.equity_curve import build_equity_curve
 from app.services.history_validation import validate_date_range
@@ -182,6 +187,20 @@ class OptimizationService:
             [weight_map[ticker] for ticker in normalized],
             capital,
         )
+        historical_means = mean_returns[:stock_count]
+        historical_vols = np.sqrt(
+            np.clip(np.diag(stats_covariance[:stock_count, :stock_count]), 0.0, None)
+        )
+        asset_stats = []
+        for ticker, mean_return, vol in zip(normalized, historical_means, historical_vols):
+            asset_stats.append(
+                AssetStatSchema(
+                    symbol=ticker,
+                    annualized_return=float(mean_return) if np.isfinite(mean_return) else None,
+                    annualized_volatility=float(vol) if np.isfinite(vol) else None,
+                )
+            )
+
         cap = "None" if max_weight is None else f"{max_weight * 100:g}%"
         assumptions = [
             *stats.assumptions,
@@ -215,6 +234,7 @@ class OptimizationService:
                 )
                 for point in curve
             ],
+            asset_stats=asset_stats,
         )
 
 
