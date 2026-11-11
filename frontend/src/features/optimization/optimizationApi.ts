@@ -12,6 +12,8 @@ export type OptimizationRequest = {
   initialCapital: number | null
   targetReturn?: number | null
   targetVolatility?: number | null
+  /** Per-ticker minimum weights (decimals). >0 keeps the stock in the mix. */
+  minWeights?: number[] | null
 }
 
 export type EquityCurvePoint = {
@@ -75,6 +77,7 @@ export async function runOptimization(
       initial_capital: request.initialCapital,
       target_return: request.targetReturn ?? null,
       target_volatility: request.targetVolatility ?? null,
+      min_weights: request.minWeights ?? null,
     }),
   })
 }
@@ -121,6 +124,7 @@ export type OptimizationRunParams = {
   target_volatility?: number | null
   initial_capital: number | null
   current_weights: number[] | null
+  min_weights?: number[] | null
   reference_prices?: Record<string, number> | null
 }
 

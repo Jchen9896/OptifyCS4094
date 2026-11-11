@@ -3,6 +3,7 @@ import { useAuth } from '@clerk/react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Card,
   CardContent,
@@ -42,6 +43,8 @@ import { applyPricesToHoldings, sumWeights, weightsAreComplete } from './holding
 import { TARGET_WEIGHT_TOTAL, type Holding } from './types.ts'
 
 const NEW_RUN_VALUE = 'new'
+/** Floor for holdings marked Required — keeps them in the mix without locking current size. */
+const REQUIRED_MIN_WEIGHT = 0.01
 
 const FIELD_HINTS = {
   maxWeight: '45',
@@ -76,6 +79,7 @@ export default function PortfolioAnalysisPage() {
   const [selectedRunId, setSelectedRunId] = useState(NEW_RUN_VALUE)
   const [runsBusy, setRunsBusy] = useState(false)
   const [runsError, setRunsError] = useState<string | null>(null)
+  const [requiredSymbols, setRequiredSymbols] = useState<string[]>([])
 
   const token = useCallback(async () => {
     const value = await getToken()
@@ -144,6 +148,7 @@ export default function PortfolioAnalysisPage() {
     setRiskFree('')
     setTargetReturn('')
     setTargetVolatility('')
+    setRequiredSymbols([])
     setHistoryKey((current) => current + 1)
   }
 
@@ -163,6 +168,10 @@ export default function PortfolioAnalysisPage() {
     setTargetVolatility(
       params.target_volatility == null ? '' : String(params.target_volatility * 100),
     )
+    const floors = params.min_weights ?? []
+    setRequiredSymbols(
+      params.tickers.filter((ticker, index) => (floors[index] ?? 0) > 0),
+    )
     setHistoryKey((current) => current + 1)
   }
 
@@ -176,6 +185,11 @@ export default function PortfolioAnalysisPage() {
     setRunError(null)
     setRunsError(null)
   }
+
+  useEffect(() => {
+    const symbols = new Set(holdings.map((holding) => holding.symbol))
+    setRequiredSymbols((current) => current.filter((symbol) => symbols.has(symbol)))
+  }, [holdings])
 
   useEffect(() => {
     if (draftRevision > 0 && pendingDraft) handleLoadPortfolio(pendingDraft)
@@ -374,6 +388,10 @@ export default function PortfolioAnalysisPage() {
         draft.targetReturnPercent == null ? null : draft.targetReturnPercent / 100
       const targetVolatilityValue =
         draft.targetVolatilityPercent == null ? null : draft.targetVolatilityPercent / 100
+      const required = new Set(requiredSymbols)
+      const minWeights = tickers.map((ticker) =>
+        required.has(ticker) ? REQUIRED_MIN_WEIGHT : 0,
+      )
       const result = await runOptimization({
         tickers,
         startDate: draft.startDate,
@@ -385,6 +403,7 @@ export default function PortfolioAnalysisPage() {
         initialCapital: draft.initialCapital,
         targetReturn: targetReturnValue,
         targetVolatility: targetVolatilityValue,
+        minWeights,
       })
       const { saveNote, portfolioId } = await saveDraftIfNeeded(draft)
       let persistNote = saveNote
@@ -405,6 +424,7 @@ export default function PortfolioAnalysisPage() {
                 target_volatility: targetVolatilityValue,
                 initial_capital: draft.initialCapital,
                 current_weights: currentWeights,
+                min_weights: minWeights,
                 reference_prices: draft.referencePrices,
               },
               result,
@@ -509,23 +529,47 @@ export default function PortfolioAnalysisPage() {
             <CardHeader>
               <CardTitle>Holdings for this run</CardTitle>
               <CardDescription>
-                Read-only summary from setup. Weights should total {TARGET_WEIGHT_TOTAL}%.
+                Mark Required to keep a stock in the optimized mix (at least{' '}
+                {(REQUIRED_MIN_WEIGHT * 100).toFixed(0)}%). Edit weights in Portfolio manager.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {hasHoldings ? (
                 <ul className="space-y-2 text-sm">
-                  {holdings.map((holding) => (
-                    <li
-                      key={holding.symbol}
-                      className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0"
-                    >
-                      <span className="font-medium">{holding.symbol}</span>
-                      <span className="text-muted-foreground">
-                        {holding.weightPercent.toFixed(1)}%
-                      </span>
-                    </li>
-                  ))}
+                  {holdings.map((holding) => {
+                    const required = requiredSymbols.includes(holding.symbol)
+                    return (
+                      <li
+                        key={holding.symbol}
+                        className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0"
+                      >
+                        <label className="flex min-w-0 items-center gap-2">
+                          <Checkbox
+                            checked={required}
+                            onCheckedChange={(checked) => {
+                              const on = checked === true
+                              setRequiredSymbols((current) => {
+                                if (on) {
+                                  return current.includes(holding.symbol)
+                                    ? current
+                                    : [...current, holding.symbol]
+                                }
+                                return current.filter((symbol) => symbol !== holding.symbol)
+                              })
+                            }}
+                            aria-label={`Require ${holding.symbol}`}
+                          />
+                          <span className="font-medium">{holding.symbol}</span>
+                          {required && (
+                            <span className="text-xs text-muted-foreground">Required</span>
+                          )}
+                        </label>
+                        <span className="text-muted-foreground">
+                          {holding.weightPercent.toFixed(1)}%
+                        </span>
+                      </li>
+                    )
+                  })}
                 </ul>
               ) : (
                 <p className="text-sm text-muted-foreground">No holdings yet.</p>

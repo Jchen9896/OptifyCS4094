@@ -35,4 +35,5 @@ def run_optimization(
         initial_capital=body.initial_capital,
         target_return=body.target_return,
         target_volatility=body.target_volatility,
+        min_weights=body.min_weights,
     )

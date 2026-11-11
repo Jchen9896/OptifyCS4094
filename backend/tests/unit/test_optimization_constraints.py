@@ -35,6 +35,34 @@ def test_infeasible_rules_are_rejected():
     assert error.value.status_code == 422
 
 
+def test_required_floors_that_exceed_100_percent_are_rejected():
+    with pytest.raises(InfeasibleAllocationRulesError, match="more than 100%"):
+        check_rules_feasible(3, None, TOLERANCE, np.array([0.5, 0.5, 0.2]))
+
+
+def test_required_floor_above_max_weight_is_rejected():
+    with pytest.raises(InfeasibleAllocationRulesError, match="maximum weight"):
+        check_rules_feasible(3, 0.2, TOLERANCE, np.array([0.25, 0.0, 0.0]))
+
+
+def test_weight_constraints_keep_required_floor():
+    weights = cp.Variable(3)
+    constraints = [
+        cp.sum(weights) == 1,
+        *weight_constraints(weights, 0.5, np.array([0.2, 0.0, 0.0])),
+    ]
+    problem = cp.Problem(cp.Minimize(weights[0]), constraints)
+    problem.solve()
+    assert weights.value[0] == pytest.approx(0.2, abs=TOLERANCE)
+
+
+def test_find_rule_violations_reports_broken_required_floor():
+    violations = find_rule_violations(
+        np.array([0.05, 0.5, 0.45]), None, TOLERANCE, np.array([0.2, 0.0, 0.0])
+    )
+    assert any("required minimum" in violation for violation in violations)
+
+
 def test_total_just_below_100_percent_is_rejected():
     with pytest.raises(InfeasibleAllocationRulesError):
         check_rules_feasible(4, 0.2499, TOLERANCE)

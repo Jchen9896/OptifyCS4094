@@ -25,6 +25,7 @@ class OptimizationStrategy(ABC):
         *,
         target_return: float | None = None,
         target_volatility: float | None = None,
+        min_weights: np.ndarray | None = None,
     ) -> np.ndarray:
         """Return one weight for each stock. The weights add up to 1."""
 

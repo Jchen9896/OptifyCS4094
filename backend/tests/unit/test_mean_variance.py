@@ -104,6 +104,16 @@ def test_long_only_rule_sets_a_weight_to_zero():
     assert weights == pytest.approx([0.0, 1.0], abs=TOLERANCE)
 
 
+def test_required_floor_keeps_risky_stock_in_min_variance():
+    # Without a floor, min-variance puts all weight in B. A 20% floor on A must stick.
+    covariance = np.array([[0.09, 0.027], [0.027, 0.01]])
+
+    weights = run(MinimumVarianceStrategy, covariance, min_weights=np.array([0.2, 0.0]))
+
+    assert weights[0] == pytest.approx(0.2, abs=TOLERANCE)
+    assert weights.sum() == pytest.approx(1.0, abs=TOLERANCE)
+
+
 def test_cap_of_one_over_n_gives_equal_weights():
     weights = run(MinimumVarianceStrategy, THREE_STOCKS, max_weight=1 / 3)
 
