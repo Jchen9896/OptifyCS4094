@@ -12,13 +12,19 @@ from app.core.errors import (
     OptimizationFailedError,
     UnreachableTargetError,
 )
-from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy, TargetReturnStrategy
+from app.optimization import mean_variance
+from app.optimization.mean_variance import (
+    MaxSharpeStrategy,
+    MinimumVarianceStrategy,
+    TargetReturnStrategy,
+    TargetRiskStrategy,
+)
 
 # The values in config.py, not from a local .env file. Refer to Decision 005.
 TOLERANCE = Settings.model_fields["optimization_tolerance"].default
 SOLVER = Settings.model_fields["optimization_solver"].default
 RISK_FREE_RATE = 0.04
-STRATEGIES = [MinimumVarianceStrategy, MaxSharpeStrategy, TargetReturnStrategy]
+STRATEGIES = [MinimumVarianceStrategy, MaxSharpeStrategy, TargetReturnStrategy, TargetRiskStrategy]
 
 # A: 20% volatility, B: 10% volatility, correlation 0.
 UNRELATED = np.array([[0.04, 0.0], [0.0, 0.01]])
@@ -45,6 +51,19 @@ def run(
 
 def sharpe(weights, expected_returns, covariance):
     return (weights @ expected_returns - RISK_FREE_RATE) / np.sqrt(weights @ covariance @ weights)
+
+
+def frontier_allocation(expected_returns, risk_aversion):
+    """Return the exact frontier allocation for THREE_STOCKS, without the long-only rule.
+
+    Palomar, section 7.1.2: w = inverse(cov) (returns - g 1) / lambda, with g chosen so that the weights add up
+    to 1. This allocation has the lowest risk for its own expected return, and the highest expected return for
+    its own volatility.
+    """
+    to_returns = np.linalg.solve(THREE_STOCKS, expected_returns)
+    to_ones = np.linalg.solve(THREE_STOCKS, np.ones(3))
+    g = (to_returns.sum() - risk_aversion) / to_ones.sum()
+    return (to_returns - g * to_ones) / risk_aversion
 
 
 def test_two_unrelated_stocks_match_the_hand_formula():
@@ -189,15 +208,10 @@ def test_target_return_two_unrelated_stocks_match_the_hand_formula():
 
 
 def test_target_return_three_stocks_match_the_exact_formula():
-    # Palomar, section 7.1.2: without the long-only rule, the allocation for risk aversion lambda is
-    # w = inverse(cov) (returns - g 1) / lambda, with g chosen so that the weights add up to 1. It has the
-    # lowest risk for its own expected return, so a target of that return must give it. Here lambda = 3 and
-    # all weights are positive, so the long-only rule does not change the answer.
+    # The exact allocation has the lowest risk for its own expected return, so a target of that return must
+    # give it. All of its weights are positive, so the long-only rule does not change the answer.
     expected_returns = np.array([0.12, 0.08, 0.10])
-    to_returns = np.linalg.solve(THREE_STOCKS, expected_returns)
-    to_ones = np.linalg.solve(THREE_STOCKS, np.ones(3))
-    g = (to_returns.sum() - 3.0) / to_ones.sum()
-    exact = (to_returns - g * to_ones) / 3.0
+    exact = frontier_allocation(expected_returns, risk_aversion=3.0)
     assert (exact > 0).all()
 
     weights = run(
@@ -213,7 +227,64 @@ def test_target_return_above_the_highest_return_is_rejected():
         run(TargetReturnStrategy, UNRELATED, max_weight=0.7, expected_returns=[0.12, 0.06], target_return=0.11)
 
 
-@pytest.mark.parametrize("strategy_class", [TargetReturnStrategy])
+def test_target_risk_two_unrelated_stocks_match_the_hand_formula():
+    # The variance 0.04 w^2 + 0.01 (1 - w)^2 is at most 0.0125 for w from -0.1 to 0.5. The return
+    # 12% w + 6% (1 - w) increases with w, so the highest return within this risk is at w = 0.5.
+    weights = run(TargetRiskStrategy, UNRELATED, expected_returns=[0.12, 0.06], target_volatility=np.sqrt(0.0125))
+
+    assert weights == pytest.approx([0.5, 0.5], abs=TOLERANCE)
+
+
+def test_target_risk_three_stocks_match_the_exact_formula():
+    # The exact allocation has the highest return for its own volatility, so a target of that volatility must
+    # give its return. With three stocks and no weight at a limit, allocations near the answer have almost the
+    # same return, so the solver can stop at slightly different weights. Thus this test compares the return and
+    # the volatility, not the weights.
+    expected_returns = np.array([0.12, 0.08, 0.10])
+    exact = frontier_allocation(expected_returns, risk_aversion=3.0)
+    target = np.sqrt(exact @ THREE_STOCKS @ exact)
+    assert (exact > 0).all()
+
+    weights = run(TargetRiskStrategy, THREE_STOCKS, expected_returns=expected_returns, target_volatility=target)
+
+    assert weights @ expected_returns == pytest.approx(exact @ expected_returns, abs=TOLERANCE)
+    assert np.sqrt(weights @ THREE_STOCKS @ weights) == pytest.approx(target, abs=TOLERANCE)
+
+
+def test_target_risk_above_the_highest_risk_gives_the_highest_return():
+    # Every allocation meets the default target volatility, so the answer has the highest return: as much as
+    # the 70% cap permits in A (12%), and the rest in B (6%).
+    weights = run(TargetRiskStrategy, UNRELATED, max_weight=0.7, expected_returns=[0.12, 0.06])
+
+    assert weights == pytest.approx([0.7, 0.3], abs=TOLERANCE)
+
+
+def test_target_risk_below_the_lowest_risk_is_rejected():
+    # The lowest volatility is that of the minimum-variance allocation (20/80): sqrt(0.008), about 8.94%.
+    with pytest.raises(UnreachableTargetError, match="at least 9.0%"):
+        run(TargetRiskStrategy, UNRELATED, expected_returns=[0.12, 0.06], target_volatility=0.08)
+
+
+@pytest.mark.parametrize("helper", ["_solve", "find_rule_violations"])
+def test_target_risk_checks_its_own_solve(helper, monkeypatch):
+    # Target risk solves twice: first minimum variance, then the problem with the volatility limit. The shared
+    # tests below stop at the first solve. Here the helper fails only on its second call.
+    real_helper = getattr(mean_variance, helper)
+    calls = []
+
+    def fail_on_the_second_call(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 2:
+            raise OptimizationFailedError("Second call.")
+        return real_helper(*args, **kwargs)
+
+    monkeypatch.setattr(mean_variance, helper, fail_on_the_second_call)
+
+    with pytest.raises(OptimizationFailedError, match="Second call."):
+        run(TargetRiskStrategy, UNRELATED, expected_returns=[0.12, 0.06])
+
+
+@pytest.mark.parametrize("strategy_class", [TargetReturnStrategy, TargetRiskStrategy])
 def test_target_strategy_without_its_target_is_rejected(strategy_class):
     with pytest.raises(InvalidOptimizationInputError, match="needs a target"):
         run(strategy_class, UNRELATED, target_return=None, target_volatility=None)
@@ -224,9 +295,10 @@ def test_target_strategy_without_its_target_is_rejected(strategy_class):
 
 @pytest.mark.parametrize("strategy_class", STRATEGIES)
 def test_nearly_identical_stocks_are_solved(strategy_class):
-    # This test protects psd_wrap. Two stocks that move the same way (for example GOOG and GOOGL),
-    # plus rounding noise, give a smallest eigenvalue of -1e-8. validate_optimizer_input accepts it.
-    # Without psd_wrap, CVXPY rejects matrices below about -1e-10 with an error that we do not catch.
+    # This test protects psd_wrap, and for target risk the factor with negative eigenvalues set to 0.
+    # Two stocks that move the same way (for example GOOG and GOOGL) give a smallest eigenvalue near 0.
+    # This test uses -1e-8, which validate_optimizer_input accepts. Without psd_wrap, CVXPY rejects matrices
+    # below about -1e-10 with an error that we do not catch.
     covariance = np.array([[0.01, 0.01 + 1e-8], [0.01 + 1e-8, 0.01]])
 
     weights = run(strategy_class, covariance)

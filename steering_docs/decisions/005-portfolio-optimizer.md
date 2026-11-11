@@ -7,6 +7,7 @@ Calculate portfolio weights with a subclass of `OptimizationStrategy` in `backen
 | `MinimumVarianceStrategy` | `min_variance` | The lowest risk (variance) |
 | `MaxSharpeStrategy` | `max_sharpe` | The highest Sharpe ratio: (expected return - risk-free rate) / volatility |
 | `TargetReturnStrategy` | `target_return` | The lowest risk with an expected return of at least the target |
+| `TargetRiskStrategy` | `target_risk` | The highest expected return with a volatility of at most the target |
 
 ## Rules
 
@@ -18,7 +19,7 @@ Calculate portfolio weights with a subclass of `OptimizationStrategy` in `backen
 - All strategies follow the allocation rules: the weights add up to 1, no weight is negative (long only), and no weight is above `max_weight`.
 - A strategy calls `check_rules_feasible` before it solves.
 - `weight_constraints` gives the solver the rules that do not depend on the size of the weights: no weight is negative, and no weight is more than `max_weight` of the total. Each strategy adds one rule that sets the size. Minimum variance uses "the weights add up to 1". Max Sharpe uses "the excess return is 1".
-- A strategy gives the covariance matrix to CVXPY through `cp.psd_wrap`. Validation is the only check of the matrix. Without `psd_wrap`, CVXPY does its own stricter check (smallest eigenvalue not below about -1e-10) and can reject a matrix that validation accepted.
+- A strategy gives the covariance matrix to CVXPY through `cp.psd_wrap`. Validation is the only check of the matrix. Without `psd_wrap`, CVXPY does its own stricter check (smallest eigenvalue not below about -1e-10) and can reject a matrix that validation accepted. `psd_wrap` works only in the objective. For a constraint, refer to "Target risk".
 - All strategies use one solver, from the setting `optimization_solver`: **CLARABEL**. Each strategy gets the solver through its constructor and gives it to `_solve`. We do not use the CVXPY default for quadratic problems (OSQP), for these reasons:
   - OSQP solves only quadratic problems. CLARABEL also solves cone problems. A limit on volatility makes a cone problem.
   - In a target-return problem near the highest expected return that the rules permit, OSQP failed in 17 of 100 tests. CLARABEL failed in 0 of 500 tests.
@@ -51,6 +52,19 @@ minimize wᵀΣw, with μᵀw ≥ target return, "the weights add up to 1" and `
 - After the solver, the strategy checks that the expected return is not more than the tolerance below the target. If it is, the run fails with `optimization_failed`.
 - The strategy adds "Target return: at least <target>." to the assumptions.
 
+## Target risk
+
+`TargetRiskStrategy` finds the allocation with the highest expected return whose volatility is at most the target. It solves problem 7.2 in Palomar, *Portfolio Optimization*, section 7.1.2:
+
+maximize μᵀw, with ‖Fᵀw‖ ≤ target volatility, "the weights add up to 1" and `weight_constraints`. F is a factor of the covariance matrix (F Fᵀ = Σ), so ‖Fᵀw‖ is the volatility of w.
+
+- The rule is "at most the target". A target at or above the volatility of the highest-return allocation gives that allocation.
+- `psd_wrap` does not work in a constraint. For a constraint, CVXPY makes its own factor of the matrix, and this step rejects some matrices that validation accepts, also with `psd_wrap` (for example, a matrix with a smallest eigenvalue of -1e-8). Thus the strategy makes F from the eigenvalues and eigenvectors of Σ, with negative eigenvalues set to 0. Validation permits these eigenvalues only down to -tolerance. When they are set to 0, the risk of an allocation can only increase. Thus a result is never above the target.
+- The lowest volatility under the rules is the volatility of the minimum-variance allocation. The strategy gets it from `MinimumVarianceStrategy`. If the target is more than the tolerance below it, `check_target_volatility_reachable` fails the run with `unreachable_target`. The message suggests the lowest volatility, rounded up to 0.1%. If a weight of the minimum-variance allocation is at `max_weight`, the message also says that a larger maximum weight can help.
+- If the target is not more than the tolerance above the lowest volatility, the strategy gives the minimum-variance allocation. At the lowest volatility, only one allocation follows the rules, and the solver cannot solve the problem reliably: in a test at exactly the lowest volatility, 145 of 200 problems failed. With this rule, no problem failed from 5e-6 below to 1e-3 above the lowest volatility (200 problems for each value).
+- After the solver, the strategy checks that the volatility (with the original Σ) is not more than the tolerance above the target. If it is, the run fails with `optimization_failed`.
+- The strategy adds "Target volatility: at most <target>." to the assumptions.
+
 ## Minimum history
 
 Too few daily returns give an unreliable covariance matrix. The optimizer then gives weights that look exact but are mostly noise. Thus `OptimizationService` needs this number of daily returns that all stocks share:
@@ -80,6 +94,9 @@ All checks of calculated values use one absolute tolerance: **1e-5**. Each check
 | Can beat the risk-free rate | The highest expected return under the rules is more than the risk-free rate + tolerance |
 | Target return can be reached | The target return is not more than the highest expected return under the rules + tolerance |
 | Target return is met | The expected return of the result is not less than the target return - tolerance |
+| Target volatility can be reached | The target volatility is not less than the lowest volatility under the rules - tolerance |
+| Target volatility near the lowest volatility | A target not more than the lowest volatility + tolerance gives the minimum-variance allocation |
+| Target volatility is met | The volatility of the result is not more than the target volatility + tolerance |
 | Solver noise | Weights nearer to 0 than the tolerance become 0 |
 | Weights follow the rules | Sum within the tolerance of 1, no weight below -tolerance, no weight above `max_weight` + tolerance |
 
@@ -107,7 +124,7 @@ Why 1e-5:
 
 1. Make a subclass of `OptimizationStrategy` in `backend/app/optimization/`. Give it a `name`.
 2. Get the tolerance and the solver through the constructor.
-3. In `compute_weights`, call `check_rules_feasible`. Give the solver one size rule plus `weight_constraints`, and use `psd_wrap`. Then call `_solve` and `_clean_and_check`.
+3. In `compute_weights`, call `check_rules_feasible`. Give the solver one size rule plus `weight_constraints`, and use `psd_wrap` (in a constraint, use a factor of the matrix; refer to "Target risk"). Then call `_solve` and `_clean_and_check`.
 4. Return the weights in ticker order.
 5. Add the class to `STRATEGIES` in `test_mean_variance.py`. Then the shared tests also run for the new strategy.
 6. Add an instance to the list in `create_optimization_service` (`service.py`). The service finds each strategy by its `name`, so the request must send this exact name.

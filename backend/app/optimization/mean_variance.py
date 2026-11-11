@@ -9,6 +9,7 @@ from app.optimization.constraints import (
     check_can_beat_risk_free_rate,
     check_rules_feasible,
     check_target_return_reachable,
+    check_target_volatility_reachable,
     clean_weights,
     find_rule_violations,
     highest_expected_return,
@@ -189,3 +190,82 @@ class TargetReturnStrategy(OptimizationStrategy):
         if target_return is None:
             return []
         return [f"Target return: at least {target_return * 100:g}%."]
+
+
+class TargetRiskStrategy(OptimizationStrategy):
+    """Finds the allocation with the highest expected return whose volatility is at most the target.
+
+    This is the mean-variance problem with a risk target (Palomar, section 7.1.2, problem 7.2).
+    The rule is "at most the target". Thus a target at or above the volatility of the highest-return
+    allocation gives that allocation.
+    """
+
+    name = "target_risk"
+
+    def __init__(self, tolerance: float, solver: str) -> None:
+        self._tolerance = tolerance
+        self._solver = solver
+        # The lowest volatility under the rules is the volatility of the minimum-variance allocation.
+        self._minimum_variance = MinimumVarianceStrategy(tolerance, solver)
+
+    def compute_weights(
+        self,
+        expected_returns: np.ndarray,
+        covariance: np.ndarray,
+        max_weight: float | None,
+        risk_free_rate: float,
+        *,
+        target_return: float | None = None,
+        target_volatility: float | None = None,
+    ) -> np.ndarray:
+        """Return the highest-return weights with a volatility of at most `target_volatility`, in ticker order.
+
+        `risk_free_rate` and `target_return` are not used. The inputs must already be checked by
+        `validate_optimizer_input`.
+        """
+        if target_volatility is None:
+            raise InvalidOptimizationInputError("The target_risk strategy needs a target volatility.")
+        asset_count = covariance.shape[0]
+        check_rules_feasible(asset_count, max_weight, self._tolerance)
+        lowest_risk_weights = self._minimum_variance.compute_weights(
+            expected_returns, covariance, max_weight, risk_free_rate
+        )
+        lowest_volatility = self._volatility(lowest_risk_weights, covariance)
+        cap_binds = max_weight is not None and bool((lowest_risk_weights >= max_weight - self._tolerance).any())
+        check_target_volatility_reachable(target_volatility, lowest_volatility, cap_binds, self._tolerance)
+        # Near the lowest volatility, only the minimum-variance allocation follows the rules, and the solver
+        # cannot solve the problem reliably. Thus the strategy gives the minimum-variance weights.
+        if target_volatility <= lowest_volatility + self._tolerance:
+            return lowest_risk_weights
+
+        weights = cp.Variable(asset_count)
+        # The covariance matrix is in a constraint, so psd_wrap does not work (Decision 005, "Target risk").
+        # Use a factor F with F F' = covariance. Negative eigenvalues from rounding are set to 0, which can
+        # only increase the risk of an allocation.
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+        factor = eigenvectors * np.sqrt(np.clip(eigenvalues, 0.0, None))
+        volatility = cp.norm(factor.T @ weights, 2)
+        constraints = [
+            cp.sum(weights) == 1,
+            volatility <= target_volatility,
+            *weight_constraints(weights, max_weight),
+        ]
+        _solve(cp.Problem(cp.Maximize(expected_returns @ weights), constraints), self._solver)
+
+        result = _clean_and_check(weights.value, max_weight, self._tolerance)
+        if self._volatility(result, covariance) > target_volatility + self._tolerance:
+            raise OptimizationFailedError(f"{FAILURE_MESSAGE} The result is above the target volatility.")
+        return result
+
+    def assumptions(
+        self, *, target_return: float | None = None, target_volatility: float | None = None
+    ) -> list[str]:
+        """Return the line for the target volatility. `target_return` is not used."""
+        if target_volatility is None:
+            return []
+        return [f"Target volatility: at most {target_volatility * 100:g}%."]
+
+    @staticmethod
+    def _volatility(weights: np.ndarray, covariance: np.ndarray) -> float:
+        """Return the volatility of `weights`. A variance below 0 from rounding counts as 0."""
+        return float(np.sqrt(max(float(weights @ covariance @ weights), 0.0)))

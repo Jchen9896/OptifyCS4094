@@ -78,6 +78,27 @@ def check_target_return_reachable(
         raise UnreachableTargetError(message)
 
 
+def check_target_volatility_reachable(
+    target_volatility: float, lowest_volatility: float, cap_binds: bool, tolerance: float
+) -> None:
+    """Raise `UnreachableTargetError` if no allocation under the rules has a volatility of at most the target.
+
+    `lowest_volatility` is the volatility of the minimum-variance allocation. `cap_binds` is True if a weight
+    of that allocation is at `max_weight`.
+    """
+    if target_volatility < lowest_volatility - tolerance:
+        # Round up to the next 0.1%. The check accepts targets down to the tolerance below the lowest volatility,
+        # so the suggested target is always accepted.
+        suggestion = math.ceil((lowest_volatility - tolerance) * 1000) / 1000
+        message = (
+            f"No allocation under the allocation rules has a volatility of at most {target_volatility * 100:g}%. "
+            f"Choose a target of at least {suggestion:.1%}."
+        )
+        if cap_binds:
+            message += " A larger maximum weight can also help."
+        raise UnreachableTargetError(message)
+
+
 def weight_constraints(weights: cp.Variable, max_weight: float | None) -> list[cp.Constraint]:
     """Return the solver rules that do not depend on the size of `weights`.
 

@@ -7,7 +7,12 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import InsufficientHistoryError, InvalidOptimizationInputError
 from app.market_data.base import PriceBar
-from app.optimization.mean_variance import MaxSharpeStrategy, MinimumVarianceStrategy, TargetReturnStrategy
+from app.optimization.mean_variance import (
+    MaxSharpeStrategy,
+    MinimumVarianceStrategy,
+    TargetReturnStrategy,
+    TargetRiskStrategy,
+)
 from app.optimization.service import OptimizationService
 from app.services.price_history_reader import PriceHistoryBatch
 from app.services.session_calendar import WeekdaySessionCalendar
@@ -61,6 +66,7 @@ def _service(
             MinimumVarianceStrategy(TOLERANCE, SOLVER),
             MaxSharpeStrategy(TOLERANCE, SOLVER),
             TargetReturnStrategy(TOLERANCE, SOLVER),
+            TargetRiskStrategy(TOLERANCE, SOLVER),
         ],
         annualization_factor=252.0,
         tolerance=TOLERANCE,
