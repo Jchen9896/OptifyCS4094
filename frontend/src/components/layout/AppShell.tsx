@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LineChart,
   LogOut,
+  MessageSquare,
   Settings,
   SlidersHorizontal,
 } from 'lucide-react'
@@ -43,6 +44,7 @@ function crumbFor(pathname: string): [string, string] {
     return ['Learn', getLearnArticle(slug)?.title ?? 'Article']
   }
   if (pathname.startsWith('/learn')) return ['Learn', 'Articles']
+  if (pathname.startsWith('/assistant')) return ['Learn', 'Assistant']
   if (pathname.startsWith('/login')) return ['Account', 'Sign in']
   return ['Portfolio', 'Dashboard']
 }
@@ -135,6 +137,10 @@ export default function AppShell() {
               >
                 <BookOpen className="size-4" />
                 Articles
+              </NavLink>
+              <NavLink to="/assistant" className={navLinkClass}>
+                <MessageSquare className="size-4" />
+                Assistant
               </NavLink>
             </nav>
           </div>

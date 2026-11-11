@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16
+    # pgvector image for assistant knowledge embeddings (Decision 013).
+    image: pgvector/pgvector:pg16
     container_name: optify-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-optify}
@@ -31,6 +32,10 @@ services:
       CREDENTIALS_FERNET_KEY: ${CREDENTIALS_FERNET_KEY:-}
       PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-https://127.0.0.1:8000}
       FRONTEND_APP_URL: ${FRONTEND_APP_URL:-http://127.0.0.1:5173}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-3.5-flash}
+      GEMINI_EMBED_MODEL: ${GEMINI_EMBED_MODEL:-gemini-embedding-001}
+      CHAT_RAG_TOP_K: ${CHAT_RAG_TOP_K:-6}
     depends_on:
       db:
         condition: service_healthy

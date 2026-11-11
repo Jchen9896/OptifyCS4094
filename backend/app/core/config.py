@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     # Yahoo symbols use letters, digits, and ".", "-", "^", "=" (for example BRK-B, RY.TO).
     ticker_pattern: str = r"[A-Z0-9.\-^=]{1,15}"
     supported_security_types: str = "EQUITY,ETF"
+    # Gemini assistant (Decision 013). Empty key disables chat routes with a clear 503.
+    gemini_api_key: str = ""
+    gemini_chat_model: str = "gemini-3.5-flash"
+    gemini_embed_model: str = "gemini-embedding-001"
+    chat_rag_top_k: int = 6
+    # gemini-embedding-001 supports Matryoshka dims; we store 768.
+    chat_embedding_dimensions: int = 768
+    chat_pending_tool_ttl_seconds: int = 600
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

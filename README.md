@@ -48,14 +48,19 @@ Fill in the three Clerk values in the root `.env`:
 
 In the Clerk development dashboard, enable email/password with email verification and Google sign-in. Under Configure → Sessions → Customize session token, set the Claims JSON to `{ "email": "{{user.primary_email_address}}" }` and save. The Clerk secret key is not used. Teammates can use the same three public values in their own ignored root `.env`.
 
+For the Assistant (Decision 013), also set `GEMINI_API_KEY` in `.env`.
+
 **2. Start PostgreSQL and FastAPI**
 
 ```bash
 docker compose up -d --build
 docker compose exec api alembic upgrade head
+docker compose exec api python -m app.chat.ingest
 ```
 
-This starts `optify-db` and `optify-api`. Database files persist in the `optify_pgdata` volume.
+This starts `optify-db` (pgvector Postgres) and `optify-api`. Database files persist in the `optify_pgdata` volume. The ingest command embeds Learn articles into `knowledge_chunks` (re-run after article changes).
+
+If `CREATE EXTENSION vector` fails on an old volume created with plain `postgres:16`, recreate the DB volume once (`docker compose down -v` wipes local DB data) and run upgrade + ingest again.
 
 - Health check: http://localhost:8000/api/health
 - Docs: http://localhost:8000/docs
