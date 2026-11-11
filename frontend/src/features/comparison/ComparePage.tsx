@@ -75,15 +75,25 @@ type CompareSide = {
   runId: string
   mode: DistributionMode
   label: string
+  distributionLabel: string
   strategy: string
   periodStart: string
   periodEnd: string
+  createdAt: string
   expectedReturn: number
   volatility: number
   sharpeRatio: number
   weights: Record<string, number>
+  tickers: string[]
+  assetCount: number
+  initialCapital: number
+  maxWeight: number | null
+  riskFreeRate: number | null
+  targetReturn: number | null
+  targetVolatility: number | null
   equityKey: 'current_value' | 'optimized_value'
   equityCurve: OptimizationRunDetail['result']['equity_curve']
+  endingValue: number | null
   hasOriginal: boolean
 }
 
@@ -123,6 +133,11 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
+function formatOptionalPercent(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+  return formatPercent(value)
+}
+
 function encodeSelection(selection: SideSelection): string {
   return `${selection.runId}::${selection.mode}`
 }
@@ -146,6 +161,15 @@ function weightsFromCurrent(detail: OptimizationRunDetail): Record<string, numbe
   )
 }
 
+function endingEquityValue(
+  curve: OptimizationRunDetail['result']['equity_curve'],
+  key: 'current_value' | 'optimized_value',
+): number | null {
+  if (!curve.length) return null
+  const value = curve[curve.length - 1]?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function buildCompareSide(detail: OptimizationRunDetail, mode: DistributionMode): CompareSide {
   const hasOriginal = runHasOriginal(detail)
   const useOriginal = mode === 'original' && hasOriginal
@@ -155,15 +179,22 @@ function buildCompareSide(detail: OptimizationRunDetail, mode: DistributionMode)
     hour: '2-digit',
     minute: '2-digit',
   })
+  const equityKey = useOriginal ? 'current_value' : 'optimized_value'
+  const weights = useOriginal ? weightsFromCurrent(detail) : detail.result.weights
+  const tickers = useOriginal
+    ? detail.params.tickers
+    : Object.keys(detail.result.weights).sort()
   return {
     runId: detail.id,
     mode: useOriginal ? 'original' : 'optimized',
     label: useOriginal
       ? `Original · ${when} · ${detail.result.period_start} → ${detail.result.period_end}`
       : `Optimized · ${when} · ${detail.params.strategy} · ${detail.result.period_start} → ${detail.result.period_end}`,
+    distributionLabel: useOriginal ? 'Original allocation' : 'Optimized',
     strategy: useOriginal ? 'Original allocation' : detail.result.strategy,
     periodStart: detail.result.period_start,
     periodEnd: detail.result.period_end,
+    createdAt: detail.created_at,
     expectedReturn: useOriginal
       ? detail.result.current_expected_return
       : detail.result.expected_return,
@@ -171,9 +202,18 @@ function buildCompareSide(detail: OptimizationRunDetail, mode: DistributionMode)
     sharpeRatio: useOriginal
       ? detail.result.current_sharpe_ratio
       : detail.result.sharpe_ratio,
-    weights: useOriginal ? weightsFromCurrent(detail) : detail.result.weights,
-    equityKey: useOriginal ? 'current_value' : 'optimized_value',
+    weights,
+    tickers,
+    assetCount: tickers.length,
+    initialCapital:
+      detail.params.initial_capital ?? detail.result.initial_capital ?? 0,
+    maxWeight: detail.params.max_weight,
+    riskFreeRate: detail.params.risk_free_rate,
+    targetReturn: detail.params.target_return ?? null,
+    targetVolatility: detail.params.target_volatility ?? null,
+    equityKey,
     equityCurve: detail.result.equity_curve,
+    endingValue: endingEquityValue(detail.result.equity_curve, equityKey),
     hasOriginal,
   }
 }
@@ -200,6 +240,87 @@ function selectionStillValid(value: string, rows: OptimizationRunSummary[]): boo
   const parsed = parseSelection(value)
   if (!parsed) return false
   return rows.some((row) => row.id === parsed.runId)
+}
+
+function settingRows(side: CompareSide): { label: string; value: string }[] {
+  const rows = [
+    { label: 'Strategy', value: side.strategy },
+    { label: 'Max weight', value: formatOptionalPercent(side.maxWeight) },
+    { label: 'Risk-free rate', value: formatOptionalPercent(side.riskFreeRate) },
+  ]
+  if (side.targetReturn != null) {
+    rows.push({ label: 'Target return', value: formatOptionalPercent(side.targetReturn) })
+  }
+  if (side.targetVolatility != null) {
+    rows.push({
+      label: 'Target volatility',
+      value: formatOptionalPercent(side.targetVolatility),
+    })
+  }
+  return rows
+}
+
+function SideSummaryCard({
+  title,
+  portfolioLabel,
+  side,
+}: {
+  title: string
+  portfolioLabel: string
+  side: CompareSide
+}) {
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardDescription className="text-xs tracking-wide uppercase">{title}</CardDescription>
+            <CardTitle className="text-base">{portfolioLabel}</CardTitle>
+          </div>
+          <Badge variant={side.mode === 'original' ? 'outline' : 'secondary'}>
+            {side.distributionLabel}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-muted-foreground">Period</p>
+            <p className="font-medium">
+              {side.periodStart} → {side.periodEnd}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Assets</p>
+            <p className="font-medium tabular-nums">{side.assetCount}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Initial capital</p>
+            <p className="font-medium tabular-nums">{formatCurrency(side.initialCapital)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Ending value</p>
+            <p className="font-medium tabular-nums">
+              {side.endingValue == null ? '—' : formatCurrency(side.endingValue)}
+            </p>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {side.mode === 'original'
+            ? 'Holdings snapshot stored with this run — not necessarily today’s Portfolio manager weights.'
+            : `Optimized with ${side.strategy}.`}{' '}
+          Saved {new Date(side.createdAt).toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+          .
+        </p>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function ComparePage() {
@@ -373,6 +494,34 @@ export default function ComparePage() {
       sideA.periodEnd === sideB.periodEnd,
   )
 
+  const tickerOverlap = useMemo(() => {
+    if (!sideA || !sideB) return null
+    const setA = new Set(sideA.tickers)
+    const setB = new Set(sideB.tickers)
+    const shared = sideA.tickers.filter((ticker) => setB.has(ticker))
+    const onlyA = sideA.tickers.filter((ticker) => !setB.has(ticker))
+    const onlyB = sideB.tickers.filter((ticker) => !setA.has(ticker))
+    return {
+      shared,
+      onlyA,
+      onlyB,
+      sameUniverse: onlyA.length === 0 && onlyB.length === 0,
+    }
+  }, [sideA, sideB])
+
+  const settingsDiffer = useMemo(() => {
+    if (!sideA || !sideB) return false
+    return (
+      sideA.maxWeight !== sideB.maxWeight ||
+      sideA.riskFreeRate !== sideB.riskFreeRate ||
+      sideA.targetReturn !== sideB.targetReturn ||
+      sideA.targetVolatility !== sideB.targetVolatility ||
+      (sideA.mode === 'optimized' &&
+        sideB.mode === 'optimized' &&
+        sideA.strategy !== sideB.strategy)
+    )
+  }, [sideA, sideB])
+
   const metrics = useMemo(() => {
     if (!sideA || !sideB) return []
     return [
@@ -392,7 +541,7 @@ export default function ComparePage() {
       },
       {
         label: 'Sharpe ratio',
-        explanation: 'Return per unit of risk after the risk-free rate',
+        explanation: 'Return per unit of risk after the risk-free rate used in that run',
         a: sideA.sharpeRatio,
         b: sideB.sharpeRatio,
         asPercent: false,
@@ -409,6 +558,7 @@ export default function ComparePage() {
       symbol,
       a: sideA.weights[symbol] ?? 0,
       b: sideB.weights[symbol] ?? 0,
+      inBoth: symbol in sideA.weights && symbol in sideB.weights,
     }))
   }, [sideA, sideB])
 
@@ -455,12 +605,21 @@ export default function ComparePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Place two sides side by side — optimized run weights or the original allocation stored
-          with a run. Prefer selections that share the same historical period.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Place two sides side by side — optimized run weights or the original allocation stored
+            with a run. Prefer selections that share the same historical period.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Original allocation is the holdings snapshot saved with that run, not necessarily the
+            weights currently in Portfolio manager.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/learn/comparing-runs">How fair comparison works</Link>
+        </Button>
       </div>
 
       <Card>
@@ -557,30 +716,9 @@ export default function ComparePage() {
               </Select>
             </Field>
           </div>
-          {sideA && sideB ? (
+          {loading && !sideA && (
             <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">Historical period</p>
-              {periodAligned ? (
-                <p className="mt-1">
-                  Shared period {sideA.periodStart} → {sideA.periodEnd} · Daily adjusted closes
-                </p>
-              ) : (
-                <p className="mt-1 text-amber-700 dark:text-amber-400">
-                  Periods differ. Side A: {sideA.periodStart} → {sideA.periodEnd}. Side B:{' '}
-                  {sideB.periodStart} → {sideB.periodEnd}. Metrics stay side by side; equity overlay
-                  needs a shared period.
-                </p>
-              )}
-              <p className="mt-2 text-xs">
-                {portfolioName(portfolioA)} ({sideA.strategy}) vs {portfolioName(portfolioB)} (
-                {sideB.strategy})
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-              {loading
-                ? 'Loading selected sides…'
-                : 'Select two sides. Use Original allocation to compare against holdings stored with a run, or Optimized for the solver result.'}
+              Loading selected sides…
             </div>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -589,17 +727,117 @@ export default function ComparePage() {
 
       {sideA && sideB && (
         <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SideSummaryCard
+              title="Side A"
+              portfolioLabel={portfolioName(portfolioA)}
+              side={sideA}
+            />
+            <SideSummaryCard
+              title="Side B"
+              portfolioLabel={portfolioName(portfolioB)}
+              side={sideB}
+            />
+          </div>
+
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <CardTitle>Aligned metric comparison</CardTitle>
+                  <CardTitle>Comparison context</CardTitle>
                   <CardDescription>
-                    Expected return, volatility, and Sharpe for each selected distribution
+                    Period alignment, universe overlap, and run settings that affect a fair read
                   </CardDescription>
                 </div>
-                <Badge variant="secondary">{periodAligned ? 'Shared period' : 'Mixed periods'}</Badge>
+                <Badge variant="secondary">
+                  {periodAligned ? 'Shared period' : 'Mixed periods'}
+                </Badge>
               </div>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-muted-foreground">
+                {periodAligned ? (
+                  <p>
+                    Shared period {sideA.periodStart} → {sideA.periodEnd} · Daily adjusted closes ·
+                    Buy-and-hold paths on this in-sample window.
+                  </p>
+                ) : (
+                  <p className="text-amber-700 dark:text-amber-400">
+                    Periods differ. Side A: {sideA.periodStart} → {sideA.periodEnd}. Side B:{' '}
+                    {sideB.periodStart} → {sideB.periodEnd}. Metrics stay side by side; equity
+                    overlay needs a shared period.
+                  </p>
+                )}
+              </div>
+
+              {tickerOverlap && (
+                <div className="rounded-lg border border-border px-3 py-3">
+                  <p className="font-medium text-foreground">Asset universe</p>
+                  {tickerOverlap.sameUniverse ? (
+                    <p className="mt-1 text-muted-foreground">
+                      Both sides use the same {tickerOverlap.shared.length} symbols.
+                    </p>
+                  ) : (
+                    <div className="mt-1 space-y-1 text-amber-700 dark:text-amber-400">
+                      <p>
+                        Universes differ — weight and equity comparisons are not fully
+                        apples-to-apples.
+                      </p>
+                      <p className="text-muted-foreground">
+                        Shared: {tickerOverlap.shared.length || 'none'}
+                        {tickerOverlap.onlyA.length
+                          ? ` · Only A: ${tickerOverlap.onlyA.join(', ')}`
+                          : ''}
+                        {tickerOverlap.onlyB.length
+                          ? ` · Only B: ${tickerOverlap.onlyB.join(', ')}`
+                          : ''}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-border px-3 py-3">
+                  <p className="font-medium">Side A settings</p>
+                  <dl className="mt-2 space-y-1 text-muted-foreground">
+                    {settingRows(sideA).map((row) => (
+                      <div key={row.label} className="flex justify-between gap-3">
+                        <dt>{row.label}</dt>
+                        <dd className="tabular-nums text-foreground">{row.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+                <div className="rounded-lg border border-border px-3 py-3">
+                  <p className="font-medium">Side B settings</p>
+                  <dl className="mt-2 space-y-1 text-muted-foreground">
+                    {settingRows(sideB).map((row) => (
+                      <div key={row.label} className="flex justify-between gap-3">
+                        <dt>{row.label}</dt>
+                        <dd className="tabular-nums text-foreground">{row.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </div>
+
+              {settingsDiffer && (
+                <p className="text-amber-700 dark:text-amber-400">
+                  Run settings differ between sides. Performance gaps may come from constraints or
+                  strategy choice, not only from the weight mix.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Aligned metric comparison</CardTitle>
+              <CardDescription>
+                Expected return, volatility, and Sharpe for each selected distribution on its run
+                window
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -638,9 +876,11 @@ export default function ComparePage() {
             <Card>
               <CardHeader>
                 <CardTitle>Historical risk-return profile</CardTitle>
-                <CardDescription>Volatility vs expected return markers</CardDescription>
+                <CardDescription>
+                  In-sample annualized volatility vs expected return for each selected distribution
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 <ChartContainer config={riskConfig} className="aspect-auto h-64 w-full">
                   <ScatterChart margin={{ left: 12, right: 12, top: 8, bottom: 8 }}>
                     <CartesianGrid />
@@ -676,6 +916,10 @@ export default function ComparePage() {
                     <Scatter name="b" data={riskPoints.b} fill="var(--color-b)" />
                   </ScatterChart>
                 </ChartContainer>
+                <p className="text-xs text-muted-foreground">
+                  Markers use the same historical window as each side’s run. They are estimates on
+                  that sample, not live forecasts.
+                </p>
               </CardContent>
             </Card>
 
@@ -684,55 +928,76 @@ export default function ComparePage() {
                 <CardTitle>Historical performance</CardTitle>
                 <CardDescription>
                   {periodAligned
-                    ? 'Equity curves for the selected distributions on the shared period'
+                    ? `Buy-and-hold equity paths from ${formatCurrency(sideA.initialCapital)} / ${formatCurrency(sideB.initialCapital)} starting capital`
                     : 'Overlay available only when periods match'}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 {periodAligned && equityData.length ? (
-                  <ChartContainer config={equityConfig} className="aspect-auto h-64 w-full">
-                    <LineChart accessibilityLayer data={equityData} margin={{ left: 12, right: 12 }}>
-                      <CartesianGrid vertical={false} />
-                      <XAxis
-                        dataKey="date"
-                        tickLine={false}
-                        axisLine={false}
-                        minTickGap={32}
-                        tickFormatter={(value: string) => value.slice(5)}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        width={72}
-                        tickFormatter={(value: number) => formatCurrency(value)}
-                      />
-                      <ChartTooltip
-                        content={
-                          <ChartTooltipContent
-                            labelFormatter={(value) => String(value)}
-                            formatter={(value) => formatCurrency(Number(value))}
-                          />
-                        }
-                      />
-                      <ChartLegend content={<ChartLegendContent />} />
-                      <Line
-                        type="monotone"
-                        dataKey="a"
-                        stroke="var(--color-a)"
-                        strokeWidth={2}
-                        dot={false}
-                        connectNulls
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="b"
-                        stroke="var(--color-b)"
-                        strokeWidth={2}
-                        dot={false}
-                        connectNulls
-                      />
-                    </LineChart>
-                  </ChartContainer>
+                  <>
+                    <ChartContainer config={equityConfig} className="aspect-auto h-64 w-full">
+                      <LineChart
+                        accessibilityLayer
+                        data={equityData}
+                        margin={{ left: 12, right: 12 }}
+                      >
+                        <CartesianGrid vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tickLine={false}
+                          axisLine={false}
+                          minTickGap={32}
+                          tickFormatter={(value: string) => value.slice(5)}
+                        />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          width={72}
+                          tickFormatter={(value: number) => formatCurrency(value)}
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              labelFormatter={(value) => String(value)}
+                              formatter={(value) => formatCurrency(Number(value))}
+                            />
+                          }
+                        />
+                        <ChartLegend content={<ChartLegendContent />} />
+                        <Line
+                          type="monotone"
+                          dataKey="a"
+                          stroke="var(--color-a)"
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="b"
+                          stroke="var(--color-b)"
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ChartContainer>
+                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                      <span>
+                        Side A end:{' '}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {sideA.endingValue == null ? '—' : formatCurrency(sideA.endingValue)}
+                        </span>
+                      </span>
+                      <span>
+                        Side B end:{' '}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {sideB.endingValue == null ? '—' : formatCurrency(sideB.endingValue)}
+                        </span>
+                      </span>
+                      <span>In-sample buy-and-hold on the shared window.</span>
+                    </div>
+                  </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     Choose two sides with the same period start and end to overlay capital paths.
@@ -749,6 +1014,9 @@ export default function ComparePage() {
                 {sideA.mode === 'original' || sideB.mode === 'original'
                   ? 'Original and/or optimized weights from the selected sides'
                   : 'Optimized weights from each selected run'}
+                {tickerOverlap && !tickerOverlap.sameUniverse
+                  ? ' · Symbols missing on a side show 0%'
+                  : ''}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -764,7 +1032,14 @@ export default function ComparePage() {
                 <TableBody>
                   {weightRows.map((row) => (
                     <TableRow key={row.symbol}>
-                      <TableCell className="font-medium">{row.symbol}</TableCell>
+                      <TableCell className="font-medium">
+                        {row.symbol}
+                        {!row.inBoth && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            not in both
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell>{formatWeight(row.a)}</TableCell>
                       <TableCell>{formatWeight(row.b)}</TableCell>
                       <TableCell className="text-muted-foreground">
