@@ -3,7 +3,6 @@ import {
   Bell,
   HelpCircle,
   LayoutDashboard,
-  ListChecks,
   LogOut,
   Search,
   Settings,
@@ -22,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { useActivePortfolio } from '@/features/portfolio/ActivePortfolioContext.tsx'
 import { cn } from '@/lib/utils'
 
 function crumbFor(pathname: string): [string, string] {
@@ -44,6 +44,7 @@ export default function AppShell() {
   const { user } = useUser()
   const { signOut } = useClerk()
   const [section, page] = crumbFor(location.pathname)
+  const { activeLabel } = useActivePortfolio()
 
   return (
     <div className="flex min-h-svh bg-background">
@@ -60,14 +61,6 @@ export default function AppShell() {
           </span>
         </div>
 
-        <Button
-          variant="outline"
-          className="mb-6 h-auto w-full justify-between border-sidebar-border bg-sidebar-accent px-3 py-2.5 font-normal text-sidebar-accent-foreground hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground"
-        >
-          Sample portfolio
-          <span className="text-sidebar-foreground/60">▾</span>
-        </Button>
-
         <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
           Portfolio
         </p>
@@ -75,10 +68,6 @@ export default function AppShell() {
           <NavLink to="/" end className={navLinkClass}>
             <LayoutDashboard className="size-4" />
             Dashboard
-          </NavLink>
-          <NavLink to="/setup" className={navLinkClass}>
-            <ListChecks className="size-4" />
-            Portfolio setup
           </NavLink>
           <NavLink to="/compare" className={navLinkClass}>
             <ArrowLeftRight className="size-4" />
@@ -112,19 +101,27 @@ export default function AppShell() {
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-sidebar-foreground">{user?.primaryEmailAddress?.emailAddress ?? 'Guest'}</p>
-              <p className="truncate text-xs text-sidebar-foreground/55">Sample portfolio</p>
+              <p className="truncate text-sm font-medium text-sidebar-foreground">
+                {user?.primaryEmailAddress?.emailAddress ?? 'Guest'}
+              </p>
+              <p className="truncate text-xs text-sidebar-foreground/55">{activeLabel}</p>
             </div>
-            {user ? <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => void signOut()}
-              className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <span aria-label="Sign out">
-                <LogOut className="size-4" />
-              </span>
-            </Button> : <NavLink to="/login" className="text-sm underline">Sign in</NavLink>}
+            {user ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => void signOut()}
+                className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <span aria-label="Sign out">
+                  <LogOut className="size-4" />
+                </span>
+              </Button>
+            ) : (
+              <NavLink to="/login" className="text-sm underline">
+                Sign in
+              </NavLink>
+            )}
           </div>
         </div>
       </aside>
