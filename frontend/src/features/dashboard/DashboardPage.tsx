@@ -531,6 +531,50 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Historical asset returns</CardTitle>
+            <CardDescription>
+              Annualized return and volatility by ticker for {result.period_start} –{' '}
+              {result.period_end}. Unavailable values show as —.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {(result.asset_stats?.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No per-ticker stats on this run. Re-run analysis to populate them.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Symbol</TableHead>
+                    <TableHead>Ann. return</TableHead>
+                    <TableHead>Ann. volatility</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {result.asset_stats?.map((row) => (
+                    <TableRow key={row.symbol}>
+                      <TableCell className="font-medium">{row.symbol}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {row.annualized_return == null
+                          ? '—'
+                          : formatPercent(row.annualized_return)}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {row.annualized_volatility == null
+                          ? '—'
+                          : formatPercent(row.annualized_volatility)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Assumptions</CardTitle>
             <CardDescription>How this estimate was produced</CardDescription>
           </CardHeader>
