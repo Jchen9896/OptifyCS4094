@@ -86,6 +86,16 @@ All portfolio routes require `Authorization: Bearer <Clerk session token>`. The 
 derives the owner from the verified session. Missing or invalid sessions return
 **401**. A `user_id` query parameter cannot select another owner (Decision 011).
 
+## Chat assistant (Decision 013)
+
+Authenticated routes under `/api/chat`:
+
+- `POST /api/chat/sessions` — create a session
+- `POST /api/chat/sessions/{id}/messages` — send a user message (`content`, optional `active_portfolio_id`); returns `reply`, Learn `citations`, and `pending_tools`
+- `POST /api/chat/sessions/{id}/confirm` — `{ tool_call_id, accept }` for proposed write tools
+
+Requires `GEMINI_API_KEY`. Missing key returns **503**. Write tools never run until confirm. Trade and brokerage vault tools are not available.
+
 ## `PATCH /api/portfolios/{portfolio_id}`
 
 Renames one portfolio. The portfolio must belong to the signed-in account (Decision 009).
