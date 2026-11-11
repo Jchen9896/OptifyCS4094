@@ -5,6 +5,8 @@ import AppShell from '../components/layout/AppShell.tsx'
 import LoginPage from '../features/auth/LoginPage.tsx'
 import ComparePage from '../features/comparison/ComparePage.tsx'
 import DashboardPage from '../features/dashboard/DashboardPage.tsx'
+import LearnArticlePage from '../features/learn/LearnArticlePage.tsx'
+import LearnPage from '../features/learn/LearnPage.tsx'
 import { ActivePortfolioProvider } from '../features/portfolio/ActivePortfolioContext.tsx'
 import PortfolioSetupPage from '../features/portfolio/PortfolioSetupPage.tsx'
 
@@ -61,6 +63,8 @@ export function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="setup" element={<PortfolioSetupPage />} />
           <Route path="compare" element={<ComparePage />} />
+          <Route path="learn" element={<LearnPage />} />
+          <Route path="learn/:slug" element={<LearnArticlePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

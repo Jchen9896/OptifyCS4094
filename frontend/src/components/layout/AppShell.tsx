@@ -1,4 +1,4 @@
-import { ArrowLeftRight, LayoutDashboard, LogOut } from 'lucide-react'
+import { ArrowLeftRight, BookOpen, LayoutDashboard, LogOut } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useClerk, useUser } from '@clerk/react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -10,6 +10,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
+import { getLearnArticle } from '@/features/learn/articles.ts'
 import { useActivePortfolio } from '@/features/portfolio/ActivePortfolioContext.tsx'
 import { cn } from '@/lib/utils'
 
@@ -18,6 +19,11 @@ const SIDEBAR_WIDTH_PX = 232
 function crumbFor(pathname: string): [string, string] {
   if (pathname.startsWith('/setup')) return ['Portfolio', 'Portfolio setup']
   if (pathname.startsWith('/compare')) return ['Portfolio', 'Compare portfolios']
+  if (pathname.startsWith('/learn/')) {
+    const slug = pathname.slice('/learn/'.length).split('/')[0]
+    return ['Learn', getLearnArticle(slug)?.title ?? 'Article']
+  }
+  if (pathname.startsWith('/learn')) return ['Learn', 'Articles']
   if (pathname.startsWith('/login')) return ['Account', 'Sign in']
   return ['Portfolio', 'Dashboard']
 }
@@ -76,6 +82,23 @@ export default function AppShell() {
             <NavLink to="/compare" className={navLinkClass}>
               <ArrowLeftRight className="size-4" />
               Compare portfolios
+            </NavLink>
+          </nav>
+
+          <p className="mt-8 mb-2 px-1 text-[11px] font-medium tracking-wide text-sidebar-foreground/55 uppercase">
+            Learn
+          </p>
+          <nav className="flex flex-col gap-1">
+            <NavLink
+              to="/learn"
+              className={({ isActive }) =>
+                navLinkClass({
+                  isActive: isActive || location.pathname.startsWith('/learn/'),
+                })
+              }
+            >
+              <BookOpen className="size-4" />
+              Articles
             </NavLink>
           </nav>
         </div>
