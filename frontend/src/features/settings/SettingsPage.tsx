@@ -20,6 +20,7 @@ import { formatConfiguredAt } from './brokerageConnections.ts'
 import {
   deleteBrokerageCredentials,
   deleteLocalAccount,
+  downloadAccountExport,
   getSchwabOAuthSetup,
   listBrokerageCredentials,
   startSchwabAuthorize,
@@ -69,6 +70,8 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const email = user?.primaryEmailAddress?.emailAddress
   const canDelete = deleteConfirm.trim() === DELETE_CONFIRM_TEXT
@@ -268,6 +271,26 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleDownloadData() {
+    setExportBusy(true)
+    setExportError(null)
+    try {
+      const token = await getToken()
+      if (!token) throw new Error('Sign in again, then retry the download.')
+      await downloadAccountExport(token)
+    } catch (caught) {
+      setExportError(
+        caught instanceof ApiError
+          ? caught.message
+          : caught instanceof Error
+            ? caught.message
+            : 'Could not download data.',
+      )
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
   async function handleDeleteAccount() {
     if (!user || !canDelete) return
     if (!window.confirm('Permanently delete your Optify account and all portfolios?')) return
@@ -323,6 +346,21 @@ export default function SettingsPage() {
           <CardTitle>Account</CardTitle>
           <CardDescription>Signed in as {email ?? 'your Clerk account'}.</CardDescription>
         </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={exportBusy}
+            onClick={() => void handleDownloadData()}
+          >
+            {exportBusy ? 'Downloading…' : 'Download data'}
+          </Button>
+          {exportError && (
+            <Alert variant="destructive">
+              <AlertDescription>{exportError}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
       </Card>
 
       <Card>

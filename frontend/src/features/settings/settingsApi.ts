@@ -32,6 +32,38 @@ export async function deleteLocalAccount(token: string): Promise<void> {
   })
 }
 
+export async function downloadAccountExport(token: string): Promise<void> {
+  const response = await fetch('/api/account/export', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      detail?: { message?: string } | string
+    }
+    const detail = body.detail
+    const message =
+      typeof detail === 'object' && detail?.message
+        ? detail.message
+        : typeof detail === 'string' && detail
+          ? detail
+          : `Could not download data (${response.status}).`
+    throw new Error(message)
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = /filename="([^"]+)"/.exec(disposition)
+  const filename =
+    match?.[1] ?? `optify-export-${new Date().toISOString().slice(0, 10)}.json`
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
 export function listBrokerageCredentials(token: string): Promise<BrokerageCredentialStatus[]> {
   return fetchJson('/api/brokerage-credentials', {
     headers: { Authorization: `Bearer ${token}` },
