@@ -28,6 +28,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080}
       CLERK_ISSUER: ${CLERK_ISSUER:-}
       CLERK_JWT_KEY: ${CLERK_JWT_KEY:-}
+      CREDENTIALS_FERNET_KEY: ${CREDENTIALS_FERNET_KEY:-}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-https://127.0.0.1:8000}
+      FRONTEND_APP_URL: ${FRONTEND_APP_URL:-http://127.0.0.1:5173}
     depends_on:
       db:
         condition: service_healthy

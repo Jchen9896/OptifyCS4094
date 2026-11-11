@@ -1,7 +1,7 @@
 import { parseSchwabPositionsCsv } from './schwabCsv.ts'
 import type { Holding } from './types.ts'
 
-export type BrokerageId = 'schwab' | 'fidelity' | 'etrade' | 'vanguard'
+export type BrokerageId = 'schwab' | 'interactive_brokers' | 'alpaca' | 'etrade'
 
 export type BrokerageImportResult = {
   portfolioName: string
@@ -18,9 +18,9 @@ export type BrokerageOption = {
 
 export const BROKERAGE_OPTIONS: BrokerageOption[] = [
   { id: 'schwab', label: 'Charles Schwab', available: true },
-  { id: 'fidelity', label: 'Fidelity', available: false },
+  { id: 'interactive_brokers', label: 'Interactive Brokers', available: false },
+  { id: 'alpaca', label: 'Alpaca', available: false },
   { id: 'etrade', label: 'E*TRADE', available: false },
-  { id: 'vanguard', label: 'Vanguard', available: false },
 ]
 
 export function parseBrokeragePositionsCsv(
@@ -37,9 +37,9 @@ export function parseBrokeragePositionsCsv(
         notes: imported.notes,
       }
     }
-    case 'fidelity':
+    case 'interactive_brokers':
+    case 'alpaca':
     case 'etrade':
-    case 'vanguard':
       throw new Error('This brokerage import is not available yet.')
     default:
       throw new Error('Choose a brokerage before importing a CSV.')
