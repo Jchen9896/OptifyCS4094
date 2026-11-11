@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -26,15 +27,33 @@ function formatQuantity(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
 }
 
+function displayWeight(weightPercent: number, draft: string | undefined): string {
+  if (draft !== undefined) return draft
+  if (weightPercent === 0) return ''
+  return String(weightPercent)
+}
+
 export default function HoldingsTable({
   holdings,
   prices,
   onWeightChange,
   onRemove,
 }: HoldingsTableProps) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
   const total = sumWeights(holdings)
   const totalOk = Math.abs(total - TARGET_WEIGHT_TOTAL) < 0.01
   const missingPrices = holdings.some((holding) => !(prices[holding.symbol] > 0))
+
+  useEffect(() => {
+    const symbols = new Set(holdings.map((holding) => holding.symbol))
+    setDrafts((current) => {
+      const next: Record<string, string> = {}
+      for (const [symbol, value] of Object.entries(current)) {
+        if (symbols.has(symbol)) next[symbol] = value
+      }
+      return next
+    })
+  }, [holdings])
 
   if (holdings.length === 0) {
     return <p className="text-sm text-muted-foreground">No assets yet. Search and add a ticker above.</p>
@@ -64,14 +83,29 @@ export default function HoldingsTable({
                   <TableCell className="text-muted-foreground">{holding.quoteType ?? '—'}</TableCell>
                   <TableCell>
                     <Input
-                      type="number"
-                      min={0}
-                      step={0.1}
+                      type="text"
+                      inputMode="decimal"
                       className="w-24"
-                      value={holding.weightPercent}
-                      onChange={(event) =>
-                        onWeightChange(holding.symbol, Number(event.target.value))
-                      }
+                      placeholder="0"
+                      value={displayWeight(holding.weightPercent, drafts[holding.symbol])}
+                      onChange={(event) => {
+                        const raw = event.target.value
+                        if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return
+                        setDrafts((current) => ({ ...current, [holding.symbol]: raw }))
+                        if (raw === '' || raw === '.') {
+                          onWeightChange(holding.symbol, 0)
+                          return
+                        }
+                        const next = Number(raw)
+                        if (Number.isFinite(next)) onWeightChange(holding.symbol, next)
+                      }}
+                      onBlur={() => {
+                        setDrafts((current) => {
+                          const next = { ...current }
+                          delete next[holding.symbol]
+                          return next
+                        })
+                      }}
                     />
                   </TableCell>
                   <TableCell>
@@ -102,7 +136,7 @@ export default function HoldingsTable({
       </p>
       {missingPrices && (
         <p className="text-sm text-muted-foreground">
-          Load prices to estimate share quantities from weights and initial portfolio value.
+          Share quantities appear after run analysis loads prices for the selected period.
         </p>
       )}
     </div>
