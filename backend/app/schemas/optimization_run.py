@@ -23,6 +23,7 @@ class OptimizationRunParams(BaseModel):
     target_volatility: float | None = Field(default=None, gt=0)
     initial_capital: float | None = Field(default=None, gt=0)
     current_weights: list[float] | None = None
+    reference_prices: dict[str, float] | None = None
 
 
 class OptimizationRunCreateRequest(BaseModel):

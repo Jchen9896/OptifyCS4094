@@ -132,6 +132,28 @@ def test_create_rejects_unknown_portfolio(session: Session):
         service.create_run(uuid.uuid4(), user.id, sample_request())
 
 
+def test_delete_removes_an_owned_run(session: Session):
+    user = add_user(session)
+    portfolio = add_portfolio(session, user)
+    service = service_for(session)
+    created = service.create_run(portfolio.id, user.id, sample_request())
+
+    service.delete_run(portfolio.id, created.id, user.id)
+
+    assert service.list_runs(portfolio.id, user.id) == []
+    with pytest.raises(OptimizationRunNotFoundError):
+        service.get_run(portfolio.id, created.id, user.id)
+
+
+def test_delete_rejects_unknown_run(session: Session):
+    user = add_user(session)
+    portfolio = add_portfolio(session, user)
+    service = service_for(session)
+
+    with pytest.raises(OptimizationRunNotFoundError):
+        service.delete_run(portfolio.id, uuid.uuid4(), user.id)
+
+
 def test_list_orders_newest_first(session: Session):
     user = add_user(session)
     portfolio = add_portfolio(session, user)

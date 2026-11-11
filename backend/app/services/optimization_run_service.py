@@ -63,6 +63,18 @@ class OptimizationRunService:
             raise OptimizationRunNotFoundError()
         return self._to_detail(row)
 
+    def delete_run(
+        self,
+        portfolio_id: uuid.UUID,
+        run_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        self._require_owned_portfolio(portfolio_id, user_id)
+        row = self._runs.get_for_portfolio(run_id, portfolio_id)
+        if row is None:
+            raise OptimizationRunNotFoundError()
+        self._runs.delete(row)
+
     def _require_owned_portfolio(self, portfolio_id: uuid.UUID, user_id: uuid.UUID) -> None:
         if self._portfolios.get_for_user(portfolio_id, user_id) is None:
             raise PortfolioNotFoundError()

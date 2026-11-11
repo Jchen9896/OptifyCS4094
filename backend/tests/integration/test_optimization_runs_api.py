@@ -69,6 +69,7 @@ class FakeOptimizationRunService:
         self.rows = rows or []
         self.error = error
         self.created = None
+        self.deleted = None
 
     def create_run(self, portfolio_id, user_id, request):
         if self.error:
@@ -85,6 +86,11 @@ class FakeOptimizationRunService:
         if self.error:
             raise self.error
         return self.detail
+
+    def delete_run(self, portfolio_id, run_id, user_id):
+        if self.error:
+            raise self.error
+        self.deleted = (portfolio_id, run_id, user_id)
 
 
 def client_for(service: FakeOptimizationRunService) -> TestClient:
@@ -161,6 +167,14 @@ def test_read_returns_one_run():
     assert response.json()["id"] == str(RUN_ID)
 
 
+def test_delete_removes_one_run():
+    service = FakeOptimizationRunService()
+    response = client_for(service).delete(f"{BASE}/{RUN_ID}")
+
+    assert response.status_code == 204
+    assert service.deleted == (PORTFOLIO_ID, RUN_ID, USER_ID)
+
+
 @pytest.mark.parametrize(
     ("error", "status_code", "code"),
     [
@@ -170,6 +184,20 @@ def test_read_returns_one_run():
 )
 def test_read_failure_has_its_own_code(error, status_code, code):
     response = client_for(FakeOptimizationRunService(error=error)).get(f"{BASE}/{RUN_ID}")
+
+    assert response.status_code == status_code
+    assert response.json() == {"detail": {"code": code, "message": error.message}}
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code"),
+    [
+        (PortfolioNotFoundError(), 404, "portfolio_not_found"),
+        (OptimizationRunNotFoundError(), 404, "optimization_run_not_found"),
+    ],
+)
+def test_delete_failure_has_its_own_code(error, status_code, code):
+    response = client_for(FakeOptimizationRunService(error=error)).delete(f"{BASE}/{RUN_ID}")
 
     assert response.status_code == status_code
     assert response.json() == {"detail": {"code": code, "message": error.message}}
