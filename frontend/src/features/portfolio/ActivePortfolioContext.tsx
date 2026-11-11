@@ -54,7 +54,7 @@ function blankDraft(): PortfolioDraft {
 }
 
 export function ActivePortfolioProvider({ children }: { children: ReactNode }) {
-  const { isSignedIn, getToken, userId } = useAuth()
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth()
   const [portfolios, setPortfolios] = useState<PortfolioSummary[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeLabel, setActiveLabel] = useState('New portfolio')
@@ -70,8 +70,12 @@ export function ActivePortfolioProvider({ children }: { children: ReactNode }) {
   }, [getToken])
 
   const refresh = useCallback(async () => {
+    if (!isLoaded) {
+      return
+    }
     if (!isSignedIn) {
       setPortfolios([])
+      setError(null)
       return
     }
     setBusy(true)
@@ -79,17 +83,22 @@ export function ActivePortfolioProvider({ children }: { children: ReactNode }) {
     try {
       setPortfolios(await listPortfolios(await token()))
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? `${caught.code}: ${caught.message}`
-          : caught instanceof Error
-            ? caught.message
-            : 'Could not list portfolios.',
-      )
+      setPortfolios([])
+      if (caught instanceof ApiError && caught.status === 401) {
+        setError('Could not verify your session with the API. Sign out and sign in again.')
+      } else {
+        setError(
+          caught instanceof ApiError
+            ? `${caught.code}: ${caught.message}`
+            : caught instanceof Error
+              ? caught.message
+              : 'Could not list portfolios.',
+        )
+      }
     } finally {
       setBusy(false)
     }
-  }, [isSignedIn, token])
+  }, [isLoaded, isSignedIn, token])
 
   useEffect(() => {
     void refresh()
