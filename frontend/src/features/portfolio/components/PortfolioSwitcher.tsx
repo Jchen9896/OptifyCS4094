@@ -5,8 +5,21 @@ import { Button } from '@/components/ui/button'
 import { useActivePortfolio } from '../ActivePortfolioContext.tsx'
 import { cn } from '@/lib/utils'
 
-/** Dashboard-only control to switch, delete, or start a portfolio. */
-export default function PortfolioSwitcher() {
+type PortfolioSwitcherProps = {
+  /** dashboard: switch + edit/new navigate to manager. manage: switch/new stay on page. select: switch only. */
+  mode?: 'dashboard' | 'manage' | 'select'
+  /** Optional title shown above the dropdown. */
+  label?: string
+  className?: string
+  align?: 'start' | 'end'
+}
+
+export default function PortfolioSwitcher({
+  mode = 'dashboard',
+  label,
+  className,
+  align = 'end',
+}: PortfolioSwitcherProps) {
   const navigate = useNavigate()
   const { user } = useUser()
   const {
@@ -22,6 +35,7 @@ export default function PortfolioSwitcher() {
   } = useActivePortfolio()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const showManageActions = mode !== 'select'
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -39,13 +53,13 @@ export default function PortfolioSwitcher() {
   async function editPortfolio(id: string) {
     setMenuOpen(false)
     await selectPortfolio(id)
-    navigate('/setup')
+    if (mode === 'dashboard') navigate('/setup')
   }
 
   function chooseNew() {
     setMenuOpen(false)
     startNew()
-    navigate('/setup')
+    if (mode === 'dashboard') navigate('/setup')
   }
 
   async function handleDelete(id: string, name: string) {
@@ -54,27 +68,44 @@ export default function PortfolioSwitcher() {
   }
 
   return (
-    <div className="flex flex-col items-stretch gap-2 sm:items-end">
-      <div ref={menuRef} className="relative w-full sm:w-80">
+    <div
+      className={cn(
+        'flex w-full min-w-[20rem] max-w-xl flex-col items-stretch gap-2',
+        align === 'end' ? 'sm:items-end' : 'sm:items-start',
+        className,
+      )}
+    >
+      {label && (
+        <p className="w-full text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {label}
+        </p>
+      )}
+      <div ref={menuRef} className="relative w-full min-w-0">
         <Button
           type="button"
           variant="outline"
           disabled={busy}
           aria-haspopup="listbox"
           aria-expanded={menuOpen}
-          className="h-auto w-full justify-between px-3 py-2.5 font-normal"
+          className="h-9 w-full min-w-0 justify-between gap-2 px-3 font-normal"
           onClick={() => {
             setMenuOpen((open) => !open)
             if (!menuOpen) void refresh()
           }}
         >
-          <span className="truncate">{activeLabel}</span>
-          <span className="text-muted-foreground">▾</span>
+          <span className="min-w-0 flex-1 truncate text-left" title={activeLabel}>
+            {activeLabel}
+          </span>
+          <span className="shrink-0 text-muted-foreground">▾</span>
         </Button>
         {menuOpen && (
           <div
             role="listbox"
-            className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-border bg-background py-1 shadow-md"
+            className={cn(
+              'absolute z-20 mt-1 max-h-72 min-w-full overflow-auto rounded-lg border border-border bg-background py-1 shadow-md',
+              'w-max max-w-[min(100vw-2rem,36rem)]',
+              align === 'end' ? 'right-0' : 'left-0',
+            )}
           >
             {!user && (
               <p className="px-3 py-2 text-xs text-muted-foreground">
@@ -91,7 +122,7 @@ export default function PortfolioSwitcher() {
               <div
                 key={row.id}
                 className={cn(
-                  'flex items-center gap-1 px-1 hover:bg-accent',
+                  'flex items-center gap-2 px-2 hover:bg-accent',
                   row.id === activeId && 'bg-accent',
                 )}
               >
@@ -99,50 +130,68 @@ export default function PortfolioSwitcher() {
                   type="button"
                   role="option"
                   aria-selected={row.id === activeId}
-                  className="min-w-0 flex-1 truncate px-2 py-2 text-left text-sm"
+                  title={row.name}
+                  className="min-w-[14rem] flex-1 truncate px-1 py-2 text-left text-sm"
                   onClick={() => void choosePortfolio(row.id)}
                 >
                   {row.name}
                 </button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0"
-                  disabled={busy}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void editPortfolio(row.id)
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 text-destructive"
-                  disabled={busy}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void handleDelete(row.id, row.name)
-                  }}
-                >
-                  Delete
-                </Button>
+                {showManageActions && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {mode === 'dashboard' && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 shrink-0 px-2.5 whitespace-nowrap"
+                        disabled={busy}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void editPortfolio(row.id)
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 shrink-0 px-2.5 whitespace-nowrap text-destructive"
+                      disabled={busy}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleDelete(row.id, row.name)
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
-            <button
-              type="button"
-              className="flex w-full border-t border-border px-3 py-2 text-left text-sm hover:bg-accent"
-              onClick={chooseNew}
-            >
-              New portfolio
-            </button>
+            {showManageActions && (
+              <button
+                type="button"
+                className="flex w-full border-t border-border px-3 py-2 text-left text-sm hover:bg-accent"
+                onClick={chooseNew}
+              >
+                New portfolio
+              </button>
+            )}
+            {mode === 'select' && (
+              <Link
+                to="/setup"
+                className="flex w-full border-t border-border px-3 py-2 text-left text-sm hover:bg-accent"
+                onClick={() => setMenuOpen(false)}
+              >
+                Open portfolio manager
+              </Link>
+            )}
           </div>
         )}
       </div>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="max-w-full truncate text-xs text-destructive">{error}</p>}
     </div>
   )
 }

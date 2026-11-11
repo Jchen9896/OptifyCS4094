@@ -118,6 +118,31 @@ function parsePercent(raw: string): number | null {
   return Number.isFinite(value) ? value : null
 }
 
+function parseQuantity(raw: string): number | null {
+  const text = raw.trim()
+  if (!text || text === '--' || /^#+$/.test(text)) return null
+  const cleaned = text.replace(/,/g, '')
+  const value = Number(cleaned)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function mapSecurityType(raw: string): string | null {
+  const value = raw.trim()
+  if (!value || value === '--') return null
+  const lower = value.toLowerCase()
+  if (lower.includes('etf') || lower.includes('closed end')) return 'ETF'
+  if (lower.includes('equity') || lower.includes('common stock') || lower.includes('stock')) {
+    return 'EQUITY'
+  }
+  if (lower.includes('mutual')) return 'MUTUAL_FUND'
+  if (lower.includes('option')) return 'OPTION'
+  if (lower.includes('bond') || lower.includes('fixed income') || lower.includes('treasury')) {
+    return 'FIXED_INCOME'
+  }
+  if (lower.includes('cash') || lower.includes('money market')) return 'CASH'
+  return value
+}
+
 function isCashRow(symbol: string, securityType: string): boolean {
   const name = symbol.trim().toLowerCase()
   const type = securityType.trim().toLowerCase()
@@ -197,7 +222,13 @@ export function parseSchwabPositionsCsv(text: string): SchwabImportResult {
     '% of acct.',
     'percent of account',
   ])
-  const typeIndex = findColumn(headers, ['security type', 'asset type'])
+  const typeIndex = findColumn(headers, ['security type', 'asset type', 'type'])
+  const quantityIndex = findColumn(headers, [
+    'qty (quantity)',
+    'quantity',
+    'qty',
+    'shares',
+  ])
 
   if (symbolIndex < 0 || weightIndex < 0) {
     throw new Error('The Schwab header must include Symbol and % of Acct columns.')
@@ -208,7 +239,9 @@ export function parseSchwabPositionsCsv(text: string): SchwabImportResult {
   const imported: {
     symbol: string
     name: string
+    quoteType: string | null
     weightPercent: number
+    quantity: number
     costBasis: number | null
   }[] = []
   let skippedCashWeightPercent = 0
@@ -256,10 +289,18 @@ export function parseSchwabPositionsCsv(text: string): SchwabImportResult {
 
     const description = descriptionIndex >= 0 ? (row[descriptionIndex] ?? '').trim() : ''
     const costBasis = costIndex >= 0 ? parseMoney(row[costIndex] ?? '') : null
+    const quantity =
+      quantityIndex >= 0 ? parseQuantity(row[quantityIndex] ?? '') : null
+    const quoteType = mapSecurityType(securityType)
+    if (quantity == null) {
+      notes.push(`Quantity was missing for ${symbol.toUpperCase()}; it was left at 0.`)
+    }
     imported.push({
       symbol: symbol.toUpperCase(),
       name: description && description !== '--' ? description : symbol.toUpperCase(),
+      quoteType,
       weightPercent,
+      quantity: quantity ?? 0,
       costBasis,
     })
   }
@@ -273,10 +314,10 @@ export function parseSchwabPositionsCsv(text: string): SchwabImportResult {
   const holdings: Holding[] = imported.map((row) => ({
     symbol: row.symbol,
     name: row.name,
-    quoteType: null,
+    quoteType: row.quoteType,
     weightPercent:
       weightSum > 0 ? Number(((row.weightPercent / weightSum) * 100).toFixed(4)) : 0,
-    quantity: 0,
+    quantity: row.quantity,
   }))
 
   const roundedSum = holdings.reduce((total, holding) => total + holding.weightPercent, 0)

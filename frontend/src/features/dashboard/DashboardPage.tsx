@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -16,11 +16,36 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ApiError } from '@/lib/apiClient'
 import { formatPercent, formatWeight } from '@/lib/formatters.ts'
-import { loadLastOptimizationRun } from '../optimization/optimizationApi.ts'
+import {
+  clearLastOptimizationRun,
+  deleteOptimizationRun,
+  listOptimizationRuns,
+  loadLastOptimizationRun,
+  readOptimizationRun,
+  type OptimizationResult,
+  type OptimizationRunSummary,
+  type StoredOptimizationRun,
+} from '../optimization/optimizationApi.ts'
 import { useActivePortfolio } from '../portfolio/ActivePortfolioContext.tsx'
+import { readPortfolio } from '../portfolio/portfolioApi.ts'
+import type { Holding } from '../portfolio/types.ts'
 import PortfolioSwitcher from '../portfolio/components/PortfolioSwitcher.tsx'
+import RunSwitcher from '../portfolio/components/RunSwitcher.tsx'
 import PortfolioPerformanceCharts from './PortfolioPerformanceCharts.tsx'
+
+type DashboardRun = {
+  result: OptimizationResult
+  holdings: Holding[]
+  portfolioName: string
+  referencePrices: Record<string, number>
+  initialCapital: number
+  source: 'saved' | 'session'
+  runId?: string
+  createdAt?: string
+  saveNote?: string | null
+}
 
 function formatMetric(value: number | undefined, asPercent: boolean): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -42,16 +67,242 @@ function formatDelta(before: number | undefined, after: number, asPercent: boole
 }
 
 function formatShares(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) {
+  if (value == null || !Number.isFinite(value) || value <= 0) {
     return '—'
   }
   return value.toLocaleString(undefined, { maximumFractionDigits: 4 })
 }
 
+function sharesForWeight(
+  weight: number,
+  capital: number,
+  price: number | undefined,
+): number | null {
+  if (!(typeof price === 'number' && price > 0 && capital > 0 && Number.isFinite(weight))) {
+    return null
+  }
+  return (weight * capital) / price
+}
+
+function fromSession(run: StoredOptimizationRun, portfolioName: string): DashboardRun {
+  return {
+    result: run.result,
+    holdings: run.holdings,
+    portfolioName: run.portfolioName || portfolioName,
+    referencePrices: run.referencePrices ?? {},
+    initialCapital: run.initialCapital ?? run.result.initial_capital,
+    source: 'session',
+    saveNote: run.saveNote,
+  }
+}
+
+function holdingsFromParams(
+  tickers: string[],
+  currentWeights: number[] | null | undefined,
+  capital: number,
+  prices: Record<string, number>,
+  quantityBySymbol: Record<string, number> = {},
+): Holding[] {
+  return tickers.map((symbol, index) => {
+    const weightPercent = Number(((currentWeights?.[index] ?? 0) * 100).toFixed(4))
+    const storedQty = quantityBySymbol[symbol]
+    const estimated = sharesForWeight(weightPercent / 100, capital, prices[symbol])
+    return {
+      symbol,
+      name: symbol,
+      quoteType: null,
+      weightPercent,
+      quantity:
+        typeof storedQty === 'number' && storedQty > 0
+          ? storedQty
+          : estimated ?? 0,
+    }
+  })
+}
+
 export default function DashboardPage() {
-  const { userId } = useAuth()
+  const { userId, getToken } = useAuth()
   const { activeId, activeLabel } = useActivePortfolio()
-  const run = useMemo(() => loadLastOptimizationRun(userId, activeId), [userId, activeId])
+  const [runSummaries, setRunSummaries] = useState<OptimizationRunSummary[]>([])
+  const [selectedRunId, setSelectedRunId] = useState('')
+  const [savedRun, setSavedRun] = useState<DashboardRun | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const sessionRun = useMemo(() => {
+    const stored = loadLastOptimizationRun(userId, activeId)
+    return stored ? fromSession(stored, activeLabel) : null
+  }, [userId, activeId, activeLabel])
+
+  const token = useCallback(async () => {
+    const value = await getToken()
+    if (!value) throw new Error('Sign in to load saved runs.')
+    return value
+  }, [getToken])
+
+  useEffect(() => {
+    if (!activeId) {
+      setRunSummaries([])
+      setSelectedRunId('')
+      setSavedRun(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    void (async () => {
+      try {
+        const rows = await listOptimizationRuns(activeId, await token())
+        if (cancelled) return
+        setRunSummaries(rows)
+        setSelectedRunId((current) =>
+          current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? '',
+        )
+        if (rows.length === 0) {
+          setSavedRun(null)
+        }
+      } catch (caught) {
+        if (cancelled) return
+        setRunSummaries([])
+        setSelectedRunId('')
+        setSavedRun(null)
+        setError(
+          caught instanceof ApiError
+            ? `${caught.code}: ${caught.message}`
+            : caught instanceof Error
+              ? caught.message
+              : 'Could not load saved runs.',
+        )
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeId, token])
+
+  useEffect(() => {
+    if (!activeId || !selectedRunId) {
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    void (async () => {
+      try {
+        const auth = await token()
+        const [detail, portfolio] = await Promise.all([
+          readOptimizationRun(activeId, selectedRunId, auth),
+          readPortfolio(auth, activeId).catch(() => null),
+        ])
+        if (cancelled) return
+        const capital =
+          detail.params.initial_capital ?? detail.result.initial_capital ?? 0
+        const prices = {
+          ...(portfolio?.setup?.reference_prices ?? {}),
+          ...(detail.params.reference_prices ?? {}),
+        }
+        const quantityBySymbol = Object.fromEntries(
+          (portfolio?.holdings ?? []).map((holding) => [
+            holding.symbol,
+            Number(holding.quantity),
+          ]),
+        )
+        setSavedRun({
+          result: detail.result,
+          holdings: holdingsFromParams(
+            detail.params.tickers,
+            detail.params.current_weights,
+            capital,
+            prices,
+            quantityBySymbol,
+          ),
+          portfolioName: activeLabel,
+          referencePrices: prices,
+          initialCapital: capital,
+          source: 'saved',
+          runId: detail.id,
+          createdAt: detail.created_at,
+        })
+        setError(null)
+      } catch (caught) {
+        if (cancelled) return
+        setSavedRun(null)
+        setError(
+          caught instanceof ApiError
+            ? `${caught.code}: ${caught.message}`
+            : caught instanceof Error
+              ? caught.message
+              : 'Could not load the selected run.',
+        )
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeId, selectedRunId, activeLabel, token])
+
+  const refreshRuns = useCallback(async () => {
+    if (!activeId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const rows = await listOptimizationRuns(activeId, await token())
+      setRunSummaries(rows)
+      setSelectedRunId((current) =>
+        current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? '',
+      )
+      if (rows.length === 0) setSavedRun(null)
+    } catch (caught) {
+      setRunSummaries([])
+      setSelectedRunId('')
+      setSavedRun(null)
+      setError(
+        caught instanceof ApiError
+          ? `${caught.code}: ${caught.message}`
+          : caught instanceof Error
+            ? caught.message
+            : 'Could not load saved runs.',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [activeId, token])
+
+  async function handleDeleteRun(runId: string) {
+    if (!activeId) return
+    setLoading(true)
+    setError(null)
+    try {
+      await deleteOptimizationRun(activeId, runId, await token())
+      clearLastOptimizationRun(userId ?? null, activeId)
+      const rows = await listOptimizationRuns(activeId, await token())
+      setRunSummaries(rows)
+      if (selectedRunId === runId) {
+        setSelectedRunId(rows[0]?.id ?? '')
+        if (rows.length === 0) setSavedRun(null)
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? `${caught.code}: ${caught.message}`
+          : caught instanceof Error
+            ? caught.message
+            : 'Could not delete the run.',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Saved portfolio → persisted run. New portfolio → browser session only.
+  const run = activeId ? savedRun : sessionRun
 
   if (!run) {
     return (
@@ -60,18 +311,23 @@ export default function DashboardPage() {
           <div>
             <h1 className="font-heading text-2xl font-semibold">Portfolio optimization overview</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              No optimization results for {activeLabel} in this browser session yet. Use Edit or New
-              portfolio in the switcher to open setup and run analysis.
+              {activeId
+                ? loading
+                  ? `Loading saved runs for ${activeLabel}…`
+                  : `No saved optimization runs for ${activeLabel} yet. Use Edit in the switcher, run analysis on setup, then return here.`
+                : `Select a saved portfolio, or use New portfolio to open setup and run analysis.`}
             </p>
+            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </div>
-          <PortfolioSwitcher />
+          <PortfolioSwitcher label="Portfolio" />
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Get started</CardTitle>
+            <CardTitle>Portfolio vs run</CardTitle>
             <CardDescription>
-              Switching portfolios here only changes the dashboard view. Use Edit on a saved
-              portfolio, or New portfolio, to open setup and run analysis.
+              A portfolio stores holdings and setup. Each analysis creates a saved run on that
+              portfolio. Compare picks two runs; this dashboard shows one run for the active
+              portfolio.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -90,15 +346,19 @@ export default function DashboardPage() {
   )
   const weightRows = Object.entries(result.weights).map(([symbol, weight]) => {
     const price = referencePrices[symbol]
-    const optimizedQty =
-      typeof price === 'number' && price > 0 && capital > 0 ? (weight * capital) / price : null
-    const currentQty = currentQtyBySymbol[symbol]
+    const currentWeight = currentBySymbol[symbol] ?? 0
+    const storedCurrentQty = currentQtyBySymbol[symbol]
+    const currentQty =
+      typeof storedCurrentQty === 'number' && storedCurrentQty > 0
+        ? storedCurrentQty
+        : sharesForWeight(currentWeight, capital, price)
+    const optimizedQty = sharesForWeight(weight, capital, price)
     return {
       symbol,
       name: names[symbol] ?? symbol,
       weight,
-      currentWeight: currentBySymbol[symbol] ?? 0,
-      currentQty: typeof currentQty === 'number' ? currentQty : null,
+      currentWeight,
+      currentQty,
       optimizedQty,
     }
   })
@@ -109,16 +369,42 @@ export default function DashboardPage() {
         <div>
           <h1 className="font-heading text-2xl font-semibold">Portfolio optimization overview</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Review optimized weights and estimated risk and return for the selected historical
-            period.
+            Review one optimization run for the active portfolio. Compare can place two saved runs
+            side by side.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Estimate · {portfolioName} · {result.period_start} – {result.period_end} ·{' '}
-            {result.strategy}
+            {run.source === 'saved' ? 'Saved run' : 'Session run'} · {portfolioName} ·{' '}
+            {result.period_start} – {result.period_end} · {result.strategy}
+            {run.createdAt
+              ? ` · ${new Date(run.createdAt).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}`
+              : ''}
           </p>
           {saveNote && <p className="mt-2 text-sm text-muted-foreground">{saveNote}</p>}
+          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         </div>
-        <PortfolioSwitcher />
+        <div className="w-full min-w-[20rem] max-w-xl shrink-0 space-y-3">
+          <PortfolioSwitcher
+            label="Portfolio"
+            className="w-full max-w-none sm:items-stretch"
+          />
+          {activeId && runSummaries.length > 0 && (
+            <RunSwitcher
+              label="Run"
+              runs={runSummaries}
+              selectedRunId={selectedRunId}
+              busy={loading}
+              onSelect={setSelectedRunId}
+              onDelete={handleDeleteRun}
+              onOpen={() => void refreshRuns()}
+              className="w-full max-w-none sm:items-stretch"
+            />
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -198,7 +484,7 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Performance charts</CardTitle>
             <CardDescription>
-              Re-run analysis from Portfolio setup to load capital and weight charts.
+              This saved run has no equity curve. Edit the portfolio and run analysis again.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -210,9 +496,9 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle>Optimized allocation</CardTitle>
-                <CardDescription>Weights and share counts from the last run</CardDescription>
+                <CardDescription>Weights from the selected run</CardDescription>
               </div>
-              <Badge variant="secondary">Live</Badge>
+              <Badge variant="secondary">{run.source === 'saved' ? 'Saved' : 'Session'}</Badge>
             </div>
           </CardHeader>
           <CardContent>

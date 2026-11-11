@@ -20,6 +20,7 @@ type PortfolioSetup = {
   target_volatility?: number | null
   weights: Record<string, number>
   reference_prices: Record<string, number>
+  quote_types?: Record<string, string> | null
 }
 
 export type SavedPortfolio = PortfolioSummary & {
@@ -58,6 +59,7 @@ export function buildPortfolioRequest(draft: PortfolioDraft) {
   }
   const weights: Record<string, number> = {}
   const prices: Record<string, number> = {}
+  const quoteTypes: Record<string, string> = {}
   const holdings = draft.holdings.map((holding) => {
     const quantity = holding.quantity.toFixed(6)
     const price = draft.referencePrices[holding.symbol]
@@ -68,6 +70,7 @@ export function buildPortfolioRequest(draft: PortfolioDraft) {
     }
     weights[holding.symbol] = holding.weightPercent
     prices[holding.symbol] = price
+    if (holding.quoteType) quoteTypes[holding.symbol] = holding.quoteType
     return { symbol: holding.symbol, quantity }
   })
   return {
@@ -86,6 +89,7 @@ export function buildPortfolioRequest(draft: PortfolioDraft) {
         draft.targetVolatilityPercent == null ? null : draft.targetVolatilityPercent / 100,
       weights,
       reference_prices: prices,
+      quote_types: Object.keys(quoteTypes).length > 0 ? quoteTypes : null,
     },
   }
 }
@@ -131,7 +135,7 @@ export function restorePortfolio(saved: SavedPortfolio): PortfolioDraft {
     holdings: saved.holdings.map((holding) => ({
       symbol: holding.symbol,
       name: holding.name,
-      quoteType: null,
+      quoteType: setup.quote_types?.[holding.symbol] ?? null,
       quantity: Number(holding.quantity),
       weightPercent: setup.weights[holding.symbol],
     })),

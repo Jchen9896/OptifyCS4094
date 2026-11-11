@@ -25,8 +25,8 @@ export const LEARN_ARTICLES: LearnArticle[] = [
       {
         heading: 'Suggested first path',
         paragraphs: [
-          'Open Portfolio setup. Name the portfolio, set an initial value, add at least two holdings, and make weights total 100%. Choose a start and end date, pick a strategy, then run analysis.',
-          'When you are signed in, Optify saves the portfolio and stores the optimization run so you can reopen it later and use Compare.',
+          'Open Portfolio manager. Name the portfolio, set an initial value, add at least two holdings, make weights total 100%, and save. Then open Portfolio analysis to choose a start and end date, pick a strategy, and run.',
+          'When you are signed in, Optify saves the portfolio and stores each optimization run so you can reopen results later and use Compare.',
         ],
       },
       {

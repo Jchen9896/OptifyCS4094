@@ -39,3 +39,8 @@ class OptimizationRunRepository:
                 OptimizationRun.portfolio_id == portfolio_id,
             )
         )
+
+    def delete(self, row: OptimizationRun) -> None:
+        """Remove one run for its portfolio."""
+        self._session.delete(row)
+        self._session.flush()

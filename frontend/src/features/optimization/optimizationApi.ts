@@ -114,6 +114,7 @@ export type OptimizationRunParams = {
   target_volatility?: number | null
   initial_capital: number | null
   current_weights: number[] | null
+  reference_prices?: Record<string, number> | null
 }
 
 export type OptimizationRunSummary = {
@@ -173,4 +174,38 @@ export async function readOptimizationRun(
     `/api/portfolios/${encodeURIComponent(portfolioId)}/optimization-runs/${encodeURIComponent(runId)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
+}
+
+export async function deleteOptimizationRun(
+  portfolioId: string,
+  runId: string,
+  token: string,
+): Promise<void> {
+  await fetchJson(
+    `/api/portfolios/${encodeURIComponent(portfolioId)}/optimization-runs/${encodeURIComponent(runId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+}
+
+const STRATEGY_LABELS: Record<string, string> = {
+  min_variance: 'Min variance',
+  max_sharpe: 'Max Sharpe',
+  target_return: 'Target return',
+  target_risk: 'Target risk',
+}
+
+export function formatOptimizationRunStrategy(strategy: string): string {
+  return STRATEGY_LABELS[strategy] ?? strategy.replaceAll('_', ' ')
+}
+
+/** Compact label for selects; keep short so triggers can truncate cleanly. */
+export function formatOptimizationRunLabel(run: OptimizationRunSummary): string {
+  const when = new Date(run.created_at).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })
+  return `${when} · ${formatOptimizationRunStrategy(run.strategy)} · ${run.period_start}–${run.period_end}`
 }

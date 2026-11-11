@@ -42,7 +42,6 @@ export default function HoldingsTable({
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const total = sumWeights(holdings)
   const totalOk = Math.abs(total - TARGET_WEIGHT_TOTAL) < 0.01
-  const missingPrices = holdings.some((holding) => !(prices[holding.symbol] > 0))
 
   useEffect(() => {
     const symbols = new Set(holdings.map((holding) => holding.symbol))
@@ -110,7 +109,9 @@ export default function HoldingsTable({
                   </TableCell>
                   <TableCell>
                     <span className="text-sm tabular-nums text-muted-foreground">
-                      {hasPrice ? formatQuantity(holding.quantity) : '—'}
+                      {hasPrice || holding.quantity > 0
+                        ? formatQuantity(holding.quantity)
+                        : '—'}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
@@ -134,11 +135,6 @@ export default function HoldingsTable({
         Total {total.toFixed(1)}% / {TARGET_WEIGHT_TOTAL}%
         {!totalOk && ' · Weights must be non-negative and total 100%.'}
       </p>
-      {missingPrices && (
-        <p className="text-sm text-muted-foreground">
-          Share quantities appear after run analysis loads prices for the selected period.
-        </p>
-      )}
     </div>
   )
 }

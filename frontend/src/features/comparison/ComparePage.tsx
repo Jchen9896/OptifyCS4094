@@ -17,7 +17,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -321,11 +320,12 @@ export default function ComparePage() {
         <div>
           <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Save a portfolio and run analysis first. Compare uses persisted optimization runs.
+            Compare uses saved optimization runs. Create a portfolio from the dashboard with New
+            portfolio, run analysis once, then return here.
           </p>
         </div>
         <Button asChild>
-          <Link to="/setup">Open portfolio setup</Link>
+          <Link to="/">Go to dashboard</Link>
         </Button>
       </div>
     )
@@ -333,22 +333,12 @@ export default function ComparePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Place two saved optimization runs side by side. Prefer runs that share the same
-            historical period.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link to="/setup">Refine blueprint</Link>
-          </Button>
-          <Button asChild>
-            <Link to="/setup">Run analysis</Link>
-          </Button>
-        </div>
+      <div>
+        <h1 className="font-heading text-2xl font-semibold">Compare portfolios</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Place two saved optimization runs side by side. Prefer runs that share the same
+          historical period.
+        </p>
       </div>
 
       <Card>
@@ -439,7 +429,7 @@ export default function ComparePage() {
             <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
               {loading
                 ? 'Loading selected runs…'
-                : 'Select two saved runs. Run analysis from setup to create history for a portfolio.'}
+                : 'Select two saved runs. If a portfolio has no runs yet, edit it from the dashboard, run analysis, then return here.'}
             </div>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -633,26 +623,6 @@ export default function ComparePage() {
           </Card>
         </>
       )}
-
-      <Card>
-        <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle>Refine results</CardTitle>
-            <CardDescription className="mt-1">
-              Adjust the blueprint on Portfolio setup, run analysis again, then compare the new
-              saved run here.
-            </CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild variant="outline">
-              <Link to="/setup">Refine blueprint</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/setup">Run analysis</Link>
-            </Button>
-          </div>
-        </CardFooter>
-      </Card>
     </div>
   )
 }

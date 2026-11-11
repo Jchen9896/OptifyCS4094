@@ -39,6 +39,8 @@ class PortfolioSetup(BaseModel):
     target_volatility: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     weights: dict[str, Weight]
     reference_prices: dict[str, PositiveNumber]
+    # Optional display labels from search or brokerage import (EQUITY, ETF, …).
+    quote_types: dict[str, str] | None = None
 
     @field_validator("strategy", mode="before")
     @classmethod
