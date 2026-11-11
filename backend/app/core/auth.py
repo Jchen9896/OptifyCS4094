@@ -49,28 +49,47 @@ def get_clerk_identity(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     settings: Settings = Depends(get_settings),
 ) -> ClerkIdentity:
-    unauthorized = HTTPException(status_code=401, detail="Invalid session")
     issuers = _issuer_values(settings)
-    if not credentials or not issuers or not settings.clerk_jwt_key:
-        raise unauthorized
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Missing Authorization Bearer token")
+    if not issuers or not settings.clerk_jwt_key:
+        raise HTTPException(status_code=401, detail="Clerk issuer or JWT public key is not configured")
     try:
+        # Clerk and the API host can disagree by a few seconds; without leeway, PyJWT
+        # rejects tokens whose iat is slightly in the future ("not yet valid").
         claims = jwt.decode(
             credentials.credentials,
             _normalize_pem(settings.clerk_jwt_key),
             algorithms=["RS256"],
             issuer=issuers,
+            leeway=60,
             options={"require": ["exp", "iat", "iss", "sub"]},
         )
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Clerk session token expired") from exc
+    except jwt.InvalidIssuerError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Clerk token issuer mismatch (expected {issuers[0]})",
+        ) from exc
     except jwt.PyJWTError as exc:
-        raise unauthorized from exc
+        raise HTTPException(status_code=401, detail=f"Invalid session ({exc})") from exc
     if claims.get("sts") == "pending":
-        raise unauthorized
-    if not _authorized_party_allowed(claims.get("azp"), settings):
-        raise unauthorized
+        raise HTTPException(status_code=401, detail="Clerk session is still pending verification")
+    azp = claims.get("azp")
+    if not _authorized_party_allowed(azp, settings):
+        allowed = sorted({origin.rstrip("/") for origin in settings.cors_origin_list})
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                f"Clerk token azp '{azp}' is not allowed. "
+                f"Add that origin to CORS_ORIGINS (currently {', '.join(allowed)})."
+            ),
+        )
     subject = claims.get("sub")
     email = claims.get("email")
     if not isinstance(subject, str) or not subject:
-        raise unauthorized
+        raise HTTPException(status_code=401, detail="Clerk session is missing the subject claim")
     if not isinstance(email, str) or not email:
         raise HTTPException(status_code=401, detail="Clerk session is missing the email claim")
     return ClerkIdentity(subject=subject, email=email.strip().lower())

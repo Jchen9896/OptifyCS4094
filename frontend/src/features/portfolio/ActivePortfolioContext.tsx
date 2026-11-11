@@ -80,33 +80,39 @@ export function ActivePortfolioProvider({ children }: { children: ReactNode }) {
     }
     setBusy(true)
     setError(null)
+    let lastError: unknown = null
     try {
-      setPortfolios(await listPortfolios(await token()))
-    } catch (caught) {
-      // Clerk can briefly hand a stale cached JWT after HMR or tab focus; retry once fresh.
-      if (caught instanceof ApiError && caught.status === 401) {
+      // Clerk can hand a stale/incomplete JWT for a beat after sign-in; retry with a fresh token.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
-          setPortfolios(await listPortfolios(await token(true)))
+          setPortfolios(await listPortfolios(await token(attempt > 0)))
           setError(null)
           return
-        } catch (retryCaught) {
-          setPortfolios([])
-          setError(
-            retryCaught instanceof ApiError && retryCaught.message === 'Clerk session is missing the email claim'
-              ? 'Clerk is missing the email session claim. Add email = {{user.primary_email_address}} in the Clerk session token, then sign out and sign in again.'
-              : 'Could not verify your session with the API. Sign out and sign in again.',
-          )
-          return
+        } catch (caught) {
+          lastError = caught
+          const unauthorized = caught instanceof ApiError && caught.status === 401
+          if (!unauthorized || attempt === 3) {
+            break
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)))
         }
       }
       setPortfolios([])
-      setError(
-        caught instanceof ApiError
-          ? `${caught.code}: ${caught.message}`
-          : caught instanceof Error
-            ? caught.message
-            : 'Could not list portfolios.',
-      )
+      if (lastError instanceof ApiError && lastError.status === 401) {
+        setError(
+          lastError.message === 'Clerk session is missing the email claim'
+            ? 'Clerk is missing the email session claim. In Clerk → Sessions → Customize session token, set {"email":"{{user.primary_email_address}}"}, save, then sign out and sign in again.'
+            : `Could not verify your session with the API (${lastError.message}). Confirm CLERK_JWT_KEY / CLERK_ISSUER match this Clerk app, then sign out and sign in again.`,
+        )
+      } else {
+        setError(
+          lastError instanceof ApiError
+            ? `${lastError.code}: ${lastError.message}`
+            : lastError instanceof Error
+              ? lastError.message
+              : 'Could not list portfolios.',
+        )
+      }
     } finally {
       setBusy(false)
     }
