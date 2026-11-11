@@ -36,6 +36,12 @@ export default function PortfolioSwitcher() {
     await selectPortfolio(id)
   }
 
+  async function editPortfolio(id: string) {
+    setMenuOpen(false)
+    await selectPortfolio(id)
+    navigate('/setup')
+  }
+
   function chooseNew() {
     setMenuOpen(false)
     startNew()
@@ -49,7 +55,7 @@ export default function PortfolioSwitcher() {
 
   return (
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
-      <div ref={menuRef} className="relative w-full sm:w-64">
+      <div ref={menuRef} className="relative w-full sm:w-80">
         <Button
           type="button"
           variant="outline"
@@ -102,6 +108,19 @@ export default function PortfolioSwitcher() {
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="shrink-0"
+                  disabled={busy}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void editPortfolio(row.id)
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
                   className="shrink-0 text-destructive"
                   disabled={busy}
                   onClick={(event) => {
@@ -124,9 +143,6 @@ export default function PortfolioSwitcher() {
         )}
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
-      <Button asChild variant="secondary">
-        <Link to="/setup">Open portfolio setup</Link>
-      </Button>
     </div>
   )
 }
