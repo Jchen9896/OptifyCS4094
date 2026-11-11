@@ -60,7 +60,7 @@ export function buildPortfolioRequest(draft: PortfolioDraft) {
     if (!(Number.isFinite(holding.weightPercent) && holding.weightPercent > 0 && holding.weightPercent <= 100) ||
         !(Number.isFinite(price) && price > 0) ||
         !(Number.isFinite(holding.quantity) && Number(quantity) > 0 && Number(quantity) < 1e12)) {
-      throw new Error('Give each asset a positive weight and load prices before saving. Quantities need at most 12 whole digits and 6 decimal places.')
+      throw new Error('Give each asset a positive weight. Prices must load successfully so quantities stay within 12 whole digits and 6 decimal places.')
     }
     weights[holding.symbol] = holding.weightPercent
     prices[holding.symbol] = price
@@ -85,6 +85,13 @@ export function createPortfolio(token: string, draft: PortfolioDraft): Promise<S
   return fetchJson('/api/portfolios', {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(buildPortfolioRequest(draft)),
+  })
+}
+
+export async function deletePortfolio(token: string, id: string): Promise<void> {
+  await fetchJson<Record<string, never>>(`/api/portfolios/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
   })
 }
 

@@ -40,10 +40,13 @@ export type StoredOptimizationRun = {
   portfolioName: string
   referencePrices: Record<string, number>
   initialCapital: number
+  portfolioId?: string | null
+  /** Optional note when auto-save was skipped or failed. */
+  saveNote?: string | null
 }
 
-function lastRunKey(userId: string | null): string {
-  return `optify.lastOptimization.${userId ?? 'guest'}`
+function lastRunKey(userId: string | null, portfolioId: string | null): string {
+  return `optify.lastOptimization.${userId ?? 'guest'}.${portfolioId ?? 'new'}`
 }
 
 export async function runOptimization(
@@ -65,12 +68,20 @@ export async function runOptimization(
   })
 }
 
-export function saveLastOptimizationRun(run: StoredOptimizationRun, userId: string | null): void {
-  sessionStorage.setItem(lastRunKey(userId), JSON.stringify(run))
+export function saveLastOptimizationRun(
+  run: StoredOptimizationRun,
+  userId: string | null,
+  portfolioId: string | null = null,
+): void {
+  const id = portfolioId ?? run.portfolioId ?? null
+  sessionStorage.setItem(lastRunKey(userId, id), JSON.stringify({ ...run, portfolioId: id }))
 }
 
-export function loadLastOptimizationRun(userId: string | null): StoredOptimizationRun | null {
-  const raw = sessionStorage.getItem(lastRunKey(userId))
+export function loadLastOptimizationRun(
+  userId: string | null,
+  portfolioId: string | null = null,
+): StoredOptimizationRun | null {
+  const raw = sessionStorage.getItem(lastRunKey(userId, portfolioId))
   if (!raw) {
     return null
   }
@@ -79,4 +90,11 @@ export function loadLastOptimizationRun(userId: string | null): StoredOptimizati
   } catch {
     return null
   }
+}
+
+export function clearLastOptimizationRun(
+  userId: string | null,
+  portfolioId: string | null = null,
+): void {
+  sessionStorage.removeItem(lastRunKey(userId, portfolioId))
 }
