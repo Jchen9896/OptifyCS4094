@@ -65,3 +65,17 @@ def read_optimization_run(
 ) -> OptimizationRunDetailResponse:
     """Read one owned run. A wrong owner gets the same 404 as a missing run."""
     return service.get_run(portfolio_id, run_id, user_id)
+
+
+@router.delete(
+    "/{portfolio_id}/optimization-runs/{run_id}",
+    status_code=204,
+)
+def delete_optimization_run(
+    portfolio_id: uuid.UUID,
+    run_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    service: OptimizationRunService = Depends(get_optimization_run_service),
+) -> None:
+    """Delete one owned run. A wrong owner gets the same 404 as a missing run."""
+    service.delete_run(portfolio_id, run_id, user_id)
