@@ -10,6 +10,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
     clerk_issuer: str = ""
     clerk_jwt_key: str = ""
+    # Fernet key for per-user brokerage BYOK secrets (url-safe base64, 32 bytes).
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    credentials_fernet_key: str = ""
+    # Public HTTPS origin of this API (no trailing slash). Used as Schwab OAuth redirect_uri host.
+    public_api_base_url: str = "https://127.0.0.1:8000"
+    # Where to send the browser after Schwab OAuth completes (no trailing slash).
+    frontend_app_url: str = "http://127.0.0.1:5173"
     market_data_interval: str = "1d"
     market_data_auto_adjust: bool = True
     market_data_search_limit: int = 10
@@ -58,6 +65,14 @@ class Settings(BaseSettings):
         if self.market_data_auto_adjust:
             return "split_dividend_adjusted"
         return "raw"
+
+    @property
+    def schwab_oauth_callback_url(self) -> str:
+        return f"{self.public_api_base_url.rstrip('/')}/api/brokerage-credentials/schwab/callback"
+
+    @property
+    def settings_oauth_redirect_url(self) -> str:
+        return f"{self.frontend_app_url.rstrip('/')}/settings"
 
 
 @lru_cache

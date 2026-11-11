@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.db import Base
 
 # Import models so Base.metadata includes their tables for autogenerate and upgrades.
+from app.models import brokerage_credential as _brokerage_credential  # noqa: F401
 from app.models import optimization_run as _optimization_run  # noqa: F401
 from app.models import portfolio as _portfolio  # noqa: F401
 from app.models import portfolio_position as _portfolio_position  # noqa: F401
