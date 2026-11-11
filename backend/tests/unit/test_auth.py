@@ -33,6 +33,7 @@ def test_clerk_session_verification():
 
     assert verify({}).subject == "user_123"
     assert verify({}).email == "person@example.com"
+    assert verify({"iss": f"{settings.clerk_issuer}/"}).subject == "user_123"
     without_origin = claims.copy()
     del without_origin["azp"]
     token = jwt.encode(without_origin, key, algorithm="RS256")

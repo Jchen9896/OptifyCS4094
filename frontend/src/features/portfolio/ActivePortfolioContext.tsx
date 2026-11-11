@@ -63,8 +63,8 @@ export function ActivePortfolioProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const token = useCallback(async () => {
-    const value = await getToken()
+  const token = useCallback(async (fresh = false) => {
+    const value = await getToken(fresh ? { skipCache: true } : undefined)
     if (!value) throw new Error('Sign in to use saved portfolios.')
     return value
   }, [getToken])
@@ -83,18 +83,30 @@ export function ActivePortfolioProvider({ children }: { children: ReactNode }) {
     try {
       setPortfolios(await listPortfolios(await token()))
     } catch (caught) {
-      setPortfolios([])
+      // Clerk can briefly hand a stale cached JWT after HMR or tab focus; retry once fresh.
       if (caught instanceof ApiError && caught.status === 401) {
-        setError('Could not verify your session with the API. Sign out and sign in again.')
-      } else {
-        setError(
-          caught instanceof ApiError
-            ? `${caught.code}: ${caught.message}`
-            : caught instanceof Error
-              ? caught.message
-              : 'Could not list portfolios.',
-        )
+        try {
+          setPortfolios(await listPortfolios(await token(true)))
+          setError(null)
+          return
+        } catch (retryCaught) {
+          setPortfolios([])
+          setError(
+            retryCaught instanceof ApiError && retryCaught.message === 'Clerk session is missing the email claim'
+              ? 'Clerk is missing the email session claim. Add email = {{user.primary_email_address}} in the Clerk session token, then sign out and sign in again.'
+              : 'Could not verify your session with the API. Sign out and sign in again.',
+          )
+          return
+        }
       }
+      setPortfolios([])
+      setError(
+        caught instanceof ApiError
+          ? `${caught.code}: ${caught.message}`
+          : caught instanceof Error
+            ? caught.message
+            : 'Could not list portfolios.',
+      )
     } finally {
       setBusy(false)
     }
@@ -175,6 +187,12 @@ export function ActivePortfolioProvider({ children }: { children: ReactNode }) {
     setActiveId(saved.id)
     setActiveLabel(saved.name)
     setError(null)
+    try {
+      setPendingDraft(restorePortfolio(saved))
+      setDraftRevision((current) => current + 1)
+    } catch {
+      // Holdings-only responses without setup stay on the prior draft.
+    }
   }, [])
 
   const value = useMemo(
