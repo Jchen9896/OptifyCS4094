@@ -187,3 +187,14 @@ class DuplicatePortfolioNameError(AppError):
             code="duplicate_portfolio_name",
             status_code=409,
         )
+
+
+class OptimizationRunNotFoundError(AppError):
+    """No optimization run exists for this id and owner."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The optimization run was not found.",
+            code="optimization_run_not_found",
+            status_code=404,
+        )

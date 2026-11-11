@@ -168,4 +168,56 @@ Setup uses the current optimizer names, `min_variance` and `max_sharpe`. The old
 
 **404** `portfolio_not_found` if the portfolio is missing or has another owner.
 
-All portfolio routes use the temporary user UUID query parameter from Decision 009. This parameter is not authentication. Use an authenticated user dependency when sign-in is added.
+## `POST /api/portfolios/{portfolio_id}/optimization-runs`
+
+Saves one completed analysis for an owned portfolio (Decision 012). Requires a Clerk session. `POST /api/optimizations` stays open without a session and does not write this table.
+
+**Request**
+
+```json
+{
+  "params": {
+    "tickers": ["AAPL", "MSFT"],
+    "start_date": "2025-01-01",
+    "end_date": "2025-06-01",
+    "strategy": "min_variance",
+    "max_weight": 0.6,
+    "risk_free_rate": 0.04,
+    "initial_capital": 10000,
+    "current_weights": [0.5, 0.5]
+  },
+  "result": {
+    "strategy": "min_variance",
+    "weights": { "AAPL": 0.4, "MSFT": 0.6 },
+    "expected_return": 0.08,
+    "volatility": 0.12,
+    "sharpe_ratio": 0.33,
+    "current_expected_return": 0.07,
+    "current_volatility": 0.14,
+    "current_sharpe_ratio": 0.21,
+    "period_start": "2025-01-01",
+    "period_end": "2025-06-01",
+    "assumptions": [],
+    "initial_capital": 10000,
+    "equity_curve": []
+  }
+}
+```
+
+**201** returns `id`, `portfolio_id`, `params`, `result`, and `created_at`.
+
+**404** `portfolio_not_found` if the portfolio is missing or has another owner.
+
+## `GET /api/portfolios/{portfolio_id}/optimization-runs`
+
+**200** returns recent runs for the owned portfolio, newest first. Each row has `id`, `portfolio_id`, `strategy`, `period_start`, `period_end`, `expected_return`, `volatility`, `sharpe_ratio`, and `created_at`. Optional `limit` defaults to 20 (max 100).
+
+**404** `portfolio_not_found` if the portfolio is missing or has another owner.
+
+## `GET /api/portfolios/{portfolio_id}/optimization-runs/{run_id}`
+
+**200** returns the full stored run (`params` + `result`).
+
+**404** `portfolio_not_found` if the portfolio is missing or has another owner.
+
+**404** `optimization_run_not_found` if the run is missing for that portfolio.
