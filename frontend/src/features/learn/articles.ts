@@ -171,7 +171,7 @@ export const LEARN_ARTICLES: LearnArticle[] = [
       {
         heading: 'What Compare shows',
         paragraphs: [
-          'Compare lets you pick two saved optimization runs from portfolios you own. It shows metrics, weights, risk-return markers, and an equity overlay when the periods match.',
+          'Compare lets you pick two sides from portfolios you own: the optimized weights from a saved run, or the original allocation stored with that run. It shows metrics, weights, risk-return markers, and an equity overlay when the periods match.',
         ],
       },
       {
