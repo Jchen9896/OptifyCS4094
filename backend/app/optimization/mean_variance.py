@@ -60,11 +60,14 @@ class MinimumVarianceStrategy(OptimizationStrategy):
         covariance: np.ndarray,
         max_weight: float | None,
         risk_free_rate: float,
+        *,
+        target_return: float | None = None,
+        target_volatility: float | None = None,
     ) -> np.ndarray:
         """Return the minimum-variance weights in ticker order.
 
-        `expected_returns` and `risk_free_rate` are not used. The interface requires them, because other
-        strategies use them. The inputs must already be checked by `validate_optimizer_input`.
+        `expected_returns`, `risk_free_rate` and the targets are not used. The interface requires them,
+        because other strategies use them. The inputs must already be checked by `validate_optimizer_input`.
         """
         asset_count = covariance.shape[0]
         check_rules_feasible(asset_count, max_weight, self._tolerance)
@@ -99,10 +102,13 @@ class MaxSharpeStrategy(OptimizationStrategy):
         covariance: np.ndarray,
         max_weight: float | None,
         risk_free_rate: float,
+        *,
+        target_return: float | None = None,
+        target_volatility: float | None = None,
     ) -> np.ndarray:
         """Return the maximum-Sharpe weights in ticker order.
 
-        The inputs must already be checked by `validate_optimizer_input`.
+        The targets are not used. The inputs must already be checked by `validate_optimizer_input`.
         """
         asset_count = covariance.shape[0]
         check_rules_feasible(asset_count, max_weight, self._tolerance)

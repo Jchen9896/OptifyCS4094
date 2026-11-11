@@ -9,8 +9,10 @@ Calculate portfolio weights with a subclass of `OptimizationStrategy` in `backen
 
 ## Rules
 
-- `validate_optimizer_input` checks the inputs before a strategy gets them. A strategy does not check them again.
-- Every strategy gets the same four inputs: `expected_returns`, `covariance`, `max_weight` and `risk_free_rate`. A strategy ignores the inputs that it does not need. The inputs have no default values, so a missing input causes an error immediately. The service changes optional user inputs to real values (for example, the risk-free rate from `Settings`) before it calls a strategy.
+- `validate_optimizer_input` checks the inputs before a strategy gets them. A strategy does not check them again. A strategy checks only the conditions that are specific to it, for example `check_can_beat_risk_free_rate` in max Sharpe, or a missing target.
+- Every strategy gets the same four core inputs: `expected_returns`, `covariance`, `max_weight` and `risk_free_rate`. A strategy ignores the inputs that it does not need. The core inputs have no default values, so a missing input causes an error immediately. The service changes optional user inputs to real values (for example, the risk-free rate from `Settings`) before it calls a strategy.
+- Inputs that only some strategies use (`target_return`, `target_volatility`) are keyword-only and have the default `None`, which means "not given". A default is permitted only when it makes the strategies that need the input fail. A default must never change a result. A strategy that needs one of these inputs and gets `None` fails with `invalid_optimization_input`.
+- A strategy can add lines to the assumptions of a result through `assumptions(target_return=..., target_volatility=...)`. The default is no lines.
 - `expected_returns`, `covariance` and `risk_free_rate` are yearly (annualized) values. To change daily values to yearly values, multiply them by 252.
 - All strategies follow the allocation rules: the weights add up to 1, no weight is negative (long only), and no weight is above `max_weight`.
 - A strategy calls `check_rules_feasible` before it solves.
@@ -32,7 +34,7 @@ The Sharpe ratio is a ratio, so CVXPY cannot maximize it directly. `MaxSharpeStr
 3. The solver minimizes the risk of the scaled weights with the rules "excess return is 1" and `weight_constraints`.
 4. The strategy divides the scaled weights by their total to get the real weights.
 
-This works only if an allocation under the rules has an expected return above the risk-free rate. `check_can_beat_risk_free_rate` checks this before the solver. It puts as much money as `max_weight` permits in the stocks with the highest expected returns first. If the result is not above the risk-free rate, the run fails.
+This works only if an allocation under the rules has an expected return above the risk-free rate. `check_can_beat_risk_free_rate` checks this before the solver. It uses `highest_expected_return`, which puts as much money as `max_weight` permits in the stocks with the highest expected returns first. If the result is not above the risk-free rate, the run fails.
 
 Known limit: max Sharpe is very sensitive to the expected returns (Palomar, section 7.5). Small errors in the expected returns can move most of the money into one or two stocks. A `max_weight` cap decreases this problem.
 
