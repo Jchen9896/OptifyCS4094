@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { useAuth } from '@clerk/react'
+import { Link } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ApiError } from '@/lib/apiClient'
 import {
   createPortfolio, listPortfolios, readPortfolio, restorePortfolio,
@@ -16,12 +17,18 @@ type Props = {
 }
 
 export default function PortfolioPersistenceControls({ draft, onLoad, onNew, disabled }: Props) {
-  const [userId, setUserId] = useState('')
+  const { isSignedIn, getToken } = useAuth()
   const [portfolios, setPortfolios] = useState<PortfolioSummary[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  async function token(): Promise<string> {
+    const value = await getToken()
+    if (!value) throw new Error('Sign in to use saved portfolios.')
+    return value
+  }
 
   async function perform(action: () => Promise<void>) {
     setBusy(true)
@@ -38,21 +45,21 @@ export default function PortfolioPersistenceControls({ draft, onLoad, onNew, dis
   }
 
   async function save() {
-    const saved = await createPortfolio(userId, draft)
+    const saved = await createPortfolio(await token(), draft)
     setPortfolios((current) => [saved, ...current.filter((row) => row.id !== saved.id)])
     setSelectedId(saved.id)
     setMessage(`Saved "${saved.name}".`)
   }
 
   async function find() {
-    const rows = await listPortfolios(userId)
+    const rows = await listPortfolios(await token())
     setPortfolios(rows)
     setSelectedId('')
     setMessage(rows.length ? 'Select a portfolio, then load it.' : 'No saved portfolios for this user.')
   }
 
   async function load() {
-    const restored = restorePortfolio(await readPortfolio(userId, selectedId))
+    const restored = restorePortfolio(await readPortfolio(await token(), selectedId))
     onLoad(restored)
     setMessage(`Loaded "${restored.portfolioName}".`)
   }
@@ -61,22 +68,11 @@ export default function PortfolioPersistenceControls({ draft, onLoad, onNew, dis
     <div className="space-y-3 rounded-lg border border-border p-4">
       <fieldset disabled={busy || disabled} className="space-y-3">
         <legend className="text-sm font-medium">Saved portfolios</legend>
-        <label className="block text-sm" htmlFor="portfolio-user-id">User ID</label>
-        <Input id="portfolio-user-id" placeholder="Existing user UUID" autoComplete="off"
-          value={userId} onChange={(event) => {
-            setUserId(event.target.value)
-            setPortfolios([])
-            setSelectedId('')
-            setMessage(null)
-            setError(null)
-          }} />
-        <p className="text-xs text-muted-foreground">
-          Sign-in is not available yet. Use an existing database user ID. Save creates a new
-          portfolio; use a different name to save a copy.
-        </p>
+        {!isSignedIn && <p className="text-sm">Sign in to save or load portfolios. <Link to="/login" className="underline">Sign in</Link></p>}
+        {isSignedIn && <p className="text-xs text-muted-foreground">Save creates a new portfolio. Use a different name to save a copy.</p>}
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" onClick={() => void perform(save)}>Save portfolio</Button>
-          <Button type="button" variant="outline" onClick={() => void perform(find)}>Find portfolios</Button>
+          <Button type="button" disabled={!isSignedIn} onClick={() => void perform(save)}>Save portfolio</Button>
+          <Button type="button" variant="outline" disabled={!isSignedIn} onClick={() => void perform(find)}>Find portfolios</Button>
           <select aria-label="Saved portfolio" value={selectedId}
             className="h-9 max-w-full rounded-md border border-input bg-background px-3 text-sm"
             onChange={(event) => setSelectedId(event.target.value)}>

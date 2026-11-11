@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes.portfolios import get_portfolio_service
+from app.core.current_user import get_current_user_id
 from app.core.errors import (
     DuplicatePortfolioNameError,
     InvalidPortfolioNameError,
@@ -36,6 +37,7 @@ class FakePortfolioService:
 def client_for(service: FakePortfolioService) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_portfolio_service] = lambda: service
+    app.dependency_overrides[get_current_user_id] = lambda: uuid.UUID("22222222-2222-2222-2222-222222222222")
     return TestClient(app)
 
 
@@ -49,13 +51,11 @@ def sample_portfolio() -> Portfolio:
 
 
 PORTFOLIO_URL = "/api/portfolios/11111111-1111-1111-1111-111111111111"
-USER_QUERY = {"user_id": "22222222-2222-2222-2222-222222222222"}
 
 
 def test_update_returns_the_renamed_portfolio():
     response = client_for(FakePortfolioService(sample_portfolio())).patch(
         PORTFOLIO_URL,
-        params=USER_QUERY,
         json={"name": "Growth"},
     )
 
@@ -70,7 +70,7 @@ def test_update_returns_the_renamed_portfolio():
 
 def test_delete_returns_no_content():
     service = FakePortfolioService()
-    response = client_for(service).delete(PORTFOLIO_URL, params=USER_QUERY)
+    response = client_for(service).delete(PORTFOLIO_URL)
 
     assert response.status_code == 204
     assert response.content == b""
@@ -88,7 +88,6 @@ def test_delete_returns_no_content():
 def test_update_failure_has_its_own_code_and_message(error, status_code):
     response = client_for(FakePortfolioService(error=error)).patch(
         PORTFOLIO_URL,
-        params=USER_QUERY,
         json={"name": "Growth"},
     )
 
@@ -98,7 +97,19 @@ def test_update_failure_has_its_own_code_and_message(error, status_code):
 
 def test_delete_failure_has_its_own_code_and_message():
     error = PortfolioNotFoundError()
-    response = client_for(FakePortfolioService(error=error)).delete(PORTFOLIO_URL, params=USER_QUERY)
+    response = client_for(FakePortfolioService(error=error)).delete(PORTFOLIO_URL)
 
     assert response.status_code == 404
     assert response.json() == {"detail": {"code": error.code, "message": error.message}}
+
+
+def test_portfolio_routes_require_a_session():
+    client = TestClient(create_app())
+    for method, url, body in [
+        ("post", "/api/portfolios", {"name": "Core"}),
+        ("get", "/api/portfolios", None),
+        ("get", PORTFOLIO_URL, None),
+        ("patch", PORTFOLIO_URL, {"name": "Core"}),
+        ("delete", PORTFOLIO_URL, None),
+    ]:
+        assert client.request(method.upper(), url, json=body, params={"user_id": str(uuid.uuid4())}).status_code == 401

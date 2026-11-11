@@ -37,14 +37,6 @@ export type PortfolioDraft = {
   referencePrices: Record<string, number>
 }
 
-function ownerQuery(userId: string): string {
-  const value = userId.trim()
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-    throw new Error('Enter an existing user UUID. Sign-in is not available yet.')
-  }
-  return `user_id=${encodeURIComponent(value)}`
-}
-
 export function buildPortfolioRequest(draft: PortfolioDraft) {
   const name = draft.portfolioName.trim()
   if (!name) throw new Error('Enter a portfolio name.')
@@ -81,18 +73,17 @@ export function buildPortfolioRequest(draft: PortfolioDraft) {
   } }
 }
 
-export function listPortfolios(userId: string): Promise<PortfolioSummary[]> {
-  return fetchJson(`/api/portfolios?${ownerQuery(userId)}`)
+export function listPortfolios(token: string): Promise<PortfolioSummary[]> {
+  return fetchJson('/api/portfolios', { headers: { Authorization: `Bearer ${token}` } })
 }
 
-export function readPortfolio(userId: string, id: string): Promise<SavedPortfolio> {
-  return fetchJson(`/api/portfolios/${encodeURIComponent(id)}?${ownerQuery(userId)}`)
+export function readPortfolio(token: string, id: string): Promise<SavedPortfolio> {
+  return fetchJson(`/api/portfolios/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } })
 }
 
-export function createPortfolio(userId: string, draft: PortfolioDraft): Promise<SavedPortfolio> {
-  const query = ownerQuery(userId)
-  return fetchJson(`/api/portfolios?${query}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+export function createPortfolio(token: string, draft: PortfolioDraft): Promise<SavedPortfolio> {
+  return fetchJson('/api/portfolios', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(buildPortfolioRequest(draft)),
   })
 }

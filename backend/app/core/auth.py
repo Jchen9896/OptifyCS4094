@@ -30,14 +30,16 @@ def get_clerk_identity(
             settings.clerk_jwt_key.replace("\\n", "\n"),
             algorithms=["RS256"],
             issuer=settings.clerk_issuer,
-            options={"require": ["exp", "iat", "iss", "sub", "sid", "azp"]},
+            options={"require": ["exp", "iat", "iss", "sub", "sid"]},
         )
     except jwt.PyJWTError as exc:
         raise unauthorized from exc
-    if claims.get("azp") not in settings.cors_origin_list or claims.get("sts") == "pending":
+    if (claims.get("azp") and claims["azp"] not in settings.cors_origin_list) or claims.get("sts") == "pending":
         raise unauthorized
     subject = claims.get("sub")
     email = claims.get("email")
-    if not isinstance(subject, str) or not subject or not isinstance(email, str) or not email:
+    if not isinstance(subject, str) or not subject:
         raise unauthorized
+    if not isinstance(email, str) or not email:
+        raise HTTPException(status_code=401, detail="Clerk session is missing the email claim")
     return ClerkIdentity(subject=subject, email=email.strip().lower())

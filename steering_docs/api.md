@@ -82,9 +82,13 @@ Returns daily prices for one symbol and date range (Decision 006). Prefers store
 
 **503** `market_data_unavailable` if the market data provider fails.
 
-## `PATCH /api/portfolios/{portfolio_id}?user_id=<uuid>`
+All portfolio routes require `Authorization: Bearer <Clerk session token>`. The API
+derives the owner from the verified session. Missing or invalid sessions return
+**401**. A `user_id` query parameter cannot select another owner (Decision 011).
 
-Renames one portfolio. The portfolio must belong to `user_id` (Decision 009).
+## `PATCH /api/portfolios/{portfolio_id}`
+
+Renames one portfolio. The portfolio must belong to the signed-in account (Decision 009).
 
 **Request**
 
@@ -113,17 +117,17 @@ The service removes spaces at the start and end of `name`. A name that is empty 
 
 **409** `duplicate_portfolio_name` if this user already has a portfolio with that name.
 
-## `DELETE /api/portfolios/{portfolio_id}?user_id=<uuid>`
+## `DELETE /api/portfolios/{portfolio_id}`
 
-Deletes one portfolio and its holdings. The portfolio must belong to `user_id`.
+Deletes one portfolio and its holdings. The portfolio must belong to the signed-in account.
 
 **204** with an empty body when the delete succeeds.
 
 **404** `portfolio_not_found` if the portfolio does not exist or another user owns it.
 
-## `POST /api/portfolios?user_id=<uuid>`
+## `POST /api/portfolios`
 
-Creates a portfolio for an existing user (Decision 010). The service trims the name and validates every ticker before a write. Holdings and setup are optional.
+Creates a portfolio for the signed-in account (Decisions 010 and 011). The service trims the name and validates every ticker before a write. Holdings and setup are optional.
 
 ```json
 {
@@ -146,19 +150,19 @@ Creates a portfolio for an existing user (Decision 010). The service trims the n
 
 Setup uses the current optimizer names, `min_variance` and `max_sharpe`. The old `minvar` and `mvo` values are accepted and returned as `min_variance`.
 
-**404** `portfolio_user_not_found` for an unknown user or `ticker_not_found` for an unknown ticker.
+**404** `ticker_not_found` for an unknown ticker.
 
 **409** `duplicate_portfolio_name` for a duplicate name within one user.
 
-**422** `invalid_portfolio_name` for a blank name; ticker validation errors follow Decision 003. Invalid quantities, duplicate normalized symbols, invalid setup inputs, and missing or malformed UUIDs return FastAPI validation errors. Quantity must be positive and fit `NUMERIC(18,6)`. Setup weights and prices must use exactly the holding symbols.
+**422** `invalid_portfolio_name` for a blank name; ticker validation errors follow Decision 003. Invalid quantities, duplicate normalized symbols, and invalid setup inputs return FastAPI validation errors. Quantity must be positive and fit `NUMERIC(18,6)`. Setup weights and prices must use exactly the holding symbols.
 
 **503** `market_data_unavailable` if ticker validation cannot reach the provider.
 
-## `GET /api/portfolios?user_id=<uuid>`
+## `GET /api/portfolios`
 
-**200** returns a JSON array of portfolio metadata (`id`, `user_id`, `name`, `created_at`), newest first. An unknown user or a user with no portfolios gets `[]`. The list contains only rows for the supplied user. Reads do not call a market data provider.
+**200** returns a JSON array of portfolio metadata (`id`, `user_id`, `name`, `created_at`), newest first. An account with no portfolios gets `[]`. The list contains only rows for the signed-in account. Reads do not call a market data provider.
 
-## `GET /api/portfolios/{portfolio_id}?user_id=<uuid>`
+## `GET /api/portfolios/{portfolio_id}`
 
 **200** returns the same detail fields as create, including stored quantities and the optional setup snapshot. Old portfolios can have `setup: null`.
 

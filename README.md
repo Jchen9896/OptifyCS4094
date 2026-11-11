@@ -40,10 +40,19 @@ cp .env.example .env
 
 On PowerShell: `Copy-Item .env.example .env`.
 
+Fill in the three Clerk values in the root `.env`:
+
+- `VITE_CLERK_PUBLISHABLE_KEY` is the publishable key from Clerk API Keys.
+- `CLERK_ISSUER` is the Frontend API URL from Clerk Domains.
+- `CLERK_JWT_KEY` is the full PEM public key from API Keys → Show JWT public key → PEM Public Key. Put the multiline key between single quotes.
+
+In the Clerk development dashboard, enable email/password with email verification and Google sign-in. Under Configure → Sessions → Customize session token, set the Claims JSON to `{ "email": "{{user.primary_email_address}}" }` and save. The Clerk secret key is not used. Teammates can use the same three public values in their own ignored root `.env`.
+
 **2. Start PostgreSQL and FastAPI**
 
 ```bash
 docker compose up -d --build
+docker compose exec api alembic upgrade head
 ```
 
 This starts `optify-db` and `optify-api`. Database files persist in the `optify_pgdata` volume.
@@ -76,7 +85,7 @@ When you want the frontend in Compose too (demos / deployment-style run):
 docker compose --profile demo up -d --build
 ```
 
-Then open http://localhost:8080. Day-to-day UI work should still use Vite on the host for faster hot reload.
+Then open http://localhost:8080. Day-to-day UI work should still use Vite on the host for faster hot reload. Both paths read the same root `.env`.
 
 ### Optional: host Python venv
 
@@ -104,7 +113,7 @@ backend\.venv\Scripts\python scripts\check_db.py
 | --- | --- | --- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Database credentials | `optify` |
 | `DATABASE_URL` | Host-side SQLAlchemy URL (`localhost`) | `postgresql+psycopg2://optify:optify@localhost:5432/optify` |
-| `CORS_ORIGINS` | Allowed browser origins | `http://localhost:5173,http://127.0.0.1:5173` |
+| `CORS_ORIGINS` | Allowed browser origins | `http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080` |
 | `API_PORT` | Published FastAPI port | `8000` |
 | `FRONTEND_PORT` | Published demo frontend port | `8080` |
 
@@ -112,17 +121,12 @@ Inside Compose, the API uses hostname `db` instead of `localhost`. Commit `.env.
 
 ## Save and load portfolios
 
-Apply migrations after the portfolio feature is merged:
-
-```bash
-docker compose exec api alembic upgrade head
-```
-
-The setup page has Save, Find, and Load controls. Sign-in is not available yet.
-Enter an existing `users.id` UUID. The app does not create a user account here.
+The setup page has Save, Find, and Load controls. Sign-in creates a local user account when that account first uses a saved portfolio.
 Save creates a new portfolio; a name must be unique for that user. Load restores
 the saved allocation, quantities, dates, prices, and analysis settings. Load
 prices before saving a portfolio with assets. An empty portfolio can also be saved.
+
+To run analysis, add at least two assets, load their historical prices, set weights to 100%, and use a positive initial value. With two assets, set the maximum weight to at least 50%.
 
 Create new portfolio clears the setup form. It does not delete saved portfolios.
 Portfolios saved without setup inputs are still readable through the API.
