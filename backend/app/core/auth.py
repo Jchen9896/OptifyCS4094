@@ -1,6 +1,7 @@
 """Verify Clerk sessions before using their account identity."""
 
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import jwt
 from fastapi import Depends, HTTPException
@@ -15,6 +16,33 @@ bearer = HTTPBearer(auto_error=False)
 class ClerkIdentity:
     subject: str
     email: str
+    name: str = "Member"
+    picture: str | None = None
+
+
+def _public_name(value: object) -> str:
+    if not isinstance(value, str):
+        return "Member"
+    name = value.strip()
+    if not name or len(name) > 80 or "@" in name or any(ord(char) < 32 for char in name):
+        return "Member"
+    return name
+
+
+def _public_picture(value: object, settings: Settings) -> str | None:
+    if not isinstance(value, str) or len(value) > 2048:
+        return None
+    try:
+        parsed = urlsplit(value)
+        host = (parsed.hostname or "").lower()
+        allowed = {item.strip().lower() for item in settings.community_avatar_hosts.split(",") if item.strip()}
+        if parsed.scheme != "https" or host not in allowed or parsed.username or parsed.password:
+            return None
+        if parsed.port not in (None, 443):
+            return None
+    except ValueError:
+        return None
+    return value
 
 
 def _normalize_pem(value: str) -> str:
@@ -92,4 +120,9 @@ def get_clerk_identity(
         raise HTTPException(status_code=401, detail="Clerk session is missing the subject claim")
     if not isinstance(email, str) or not email:
         raise HTTPException(status_code=401, detail="Clerk session is missing the email claim")
-    return ClerkIdentity(subject=subject, email=email.strip().lower())
+    return ClerkIdentity(
+        subject=subject,
+        email=email.strip().lower(),
+        name=_public_name(claims.get("name")),
+        picture=_public_picture(claims.get("picture"), settings),
+    )

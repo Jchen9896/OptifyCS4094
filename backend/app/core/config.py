@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
     clerk_issuer: str = ""
     clerk_jwt_key: str = ""
+    community_avatar_hosts: str = "images.clerk.dev,img.clerk.com"
     # Fernet key for per-user brokerage BYOK secrets (url-safe base64, 32 bytes).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     credentials_fernet_key: str = ""
