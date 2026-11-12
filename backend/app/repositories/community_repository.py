@@ -29,7 +29,9 @@ class CommunityRepository:
         return self._db.get(CommunityPost, post_id)
 
     def locked_post(self, post_id: uuid.UUID, *, update: bool) -> CommunityPost | None:
-        return self._db.scalar(select(CommunityPost).where(CommunityPost.id == post_id).with_for_update(key_share=not update))
+        query = select(CommunityPost).where(CommunityPost.id == post_id)
+        lock = query.with_for_update() if update else query.with_for_update(read=True, key_share=True)
+        return self._db.scalar(lock)
 
     def lock_user(self, user_id: uuid.UUID) -> User | None:
         return self._db.scalar(select(User).where(User.id == user_id).with_for_update())
