@@ -8,7 +8,7 @@ import CommunityFeedPage from '../../src/features/community/CommunityFeedPage'
 import CommunityNewPage from '../../src/features/community/CommunityNewPage'
 
 const post = {
-  id: '11111111-1111-4111-8111-111111111111', category: 'question', title: 'A question', body: 'Hello',
+  id: '11111111-1111-4111-8111-111111111111', category: 'question', title: 'A question', body: 'Hello **world**',
   author: { name: 'Member', picture: null }, is_mine: true, created_at: '2026-11-12T12:00:00Z', edited_at: null,
 }
 afterEach(cleanup)
@@ -23,6 +23,7 @@ describe('feed and creation', () => {
     } })
     render(<MemoryRouter><CommunityProvider api={api} reauthenticate={() => {}}><CommunityFeedPage /></CommunityProvider></MemoryRouter>)
     await screen.findByRole('link', { name: 'A question' })
+    expect(screen.getByText('world').tagName).toBe('STRONG')
     fireEvent.click(screen.getByRole('button', { name: 'Questions' }))
     await screen.findByRole('heading', { name: 'Start a conversation' })
     expect(screen.queryByRole('link', { name: 'A question' })).toBeNull()

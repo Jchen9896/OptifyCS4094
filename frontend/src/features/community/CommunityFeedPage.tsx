@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useCommunity } from './CommunityContext'
+import { CommunityMarkdown } from './CommunityMarkdown'
 import { CommunityAuthor, CommunityFailure, PageContinuation } from './CommunityShared'
 import { useCommunityPage } from './useCommunityRequests'
 
@@ -30,7 +31,7 @@ function Feed({ category }: { category: string }) {
         <h2 className="break-words text-lg font-semibold tracking-tight">
           <Link className="rounded-sm hover:text-primary focus-visible:outline-2 focus-visible:outline-ring" to={'/community/' + post.id}>{post.title}</Link>
         </h2>
-        <p className="line-clamp-2 break-words text-sm leading-relaxed text-muted-foreground">{post.body}</p>
+        <div className="line-clamp-2 min-w-0 text-muted-foreground"><CommunityMarkdown body={post.body.split(/\n\s*\n/, 1)[0]} /></div>
         <CommunityAuthor author={post.author} createdAt={post.created_at} editedAt={post.edited_at} />
       </CardContent>
     </Card>)}
