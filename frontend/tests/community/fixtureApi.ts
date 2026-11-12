@@ -22,8 +22,8 @@ const replies: Reply[] = [
   { id: '77777777-7777-4777-8777-777777777777', post_id: postId, parent_reply_id: '66666666-6666-4666-8666-666666666666', body: 'This response survives a deleted parent.', created_at: date, edited_at: null, deleted_at: null, author, is_mine: false },
 ]
 export const fixtureFailures = { read: false, write: false }
-const input = z.object({ title: z.string(), body: z.string(), category: z.string() })
-const replyInput = z.object({ body: z.string(), parent_reply_id: z.string().nullable().optional() })
+const input = z.strictObject({ title: z.string(), body: z.string(), category: z.string() })
+const replyInput = z.strictObject({ body: z.string(), parent_reply_id: z.string().nullable().optional() })
 export const fixtureApi = createCommunityApi({
   getToken: async () => 'fixture-only-not-a-Clerk-token',
   fetcher: async (raw, init) => {

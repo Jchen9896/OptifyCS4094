@@ -42,6 +42,30 @@ describe('request ownership', () => {
     act(() => result.current.more())
     await waitFor(() => expect(result.current.state).toMatchObject({ data: { items: [{ id: 'one' }, { id: 'two' }], next_cursor: null } }))
   })
+  it('does not resurrect an older sibling read over a successful mutation', async () => {
+    const pending = deferred<{ items: { id: string; text: string }[]; next_cursor: null }>()
+    const load = (cursor: string | null) => cursor ? pending.promise : Promise.resolve({ items: [{ id: 'one', text: 'old' }], next_cursor: 'next' })
+    const { result } = renderHook(() => useCommunityPage(load))
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'))
+    act(() => result.current.more())
+    act(() => result.current.invalidate({ id: 'one', text: 'edited' }))
+    await act(async () => pending.resolve({ items: [{ id: 'one', text: 'old' }], next_cursor: null }))
+    expect(result.current.state).toMatchObject({ data: { items: [{ id: 'one', text: 'edited' }], next_cursor: 'next', continuation: { kind: 'idle' } } })
+  })
+  it('prevents duplicate writes even before a busy render', async () => {
+    const pending = deferred<string>()
+    let writes = 0
+    let completions = 0
+    const { result } = renderHook(useCommunityMutation)
+    const write = () => { writes++; return pending.promise }
+    act(() => {
+      void result.current.run(write, () => { completions++ })
+      void result.current.run(write, () => { completions++ })
+    })
+    expect(writes).toBe(1)
+    await act(async () => pending.resolve('saved'))
+    expect(completions).toBe(1)
+  })
   it('never runs an old account mutation callback after unmount', async () => {
     const pending = deferred<string>()
     let completed = false
