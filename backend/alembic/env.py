@@ -14,6 +14,7 @@ from app.models import knowledge_chunk as _knowledge_chunk  # noqa: F401
 from app.models import optimization_run as _optimization_run  # noqa: F401
 from app.models import portfolio as _portfolio  # noqa: F401
 from app.models import portfolio_position as _portfolio_position  # noqa: F401
+from app.models import portfolio_risk_profile as _portfolio_risk_profile  # noqa: F401
 from app.models import price_history as _price_history  # noqa: F401
 from app.models import stock as _stock  # noqa: F401
 from app.models import user as _user  # noqa: F401

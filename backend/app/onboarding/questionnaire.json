@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "time_horizon",
+      "dimension": "capacity",
+      "prompt": "When do you expect to need most of the money in this portfolio?",
+      "options": [
+        { "id": "under_1y", "label": "In less than 1 year", "points": 0 },
+        { "id": "1_3y", "label": "In 1 to 3 years", "points": 1 },
+        { "id": "3_5y", "label": "In 3 to 5 years", "points": 2 },
+        { "id": "5_10y", "label": "In 5 to 10 years", "points": 3 },
+        { "id": "over_10y", "label": "In more than 10 years", "points": 4 }
+      ]
+    },
+    {
+      "id": "withdrawals",
+      "dimension": "capacity",
+      "prompt": "How likely is it that you will take money out of this portfolio in the next 2 years?",
+      "options": [
+        { "id": "certain", "label": "I will take out most of it", "points": 0 },
+        { "id": "some", "label": "I will probably take out some of it", "points": 2 },
+        { "id": "unlikely", "label": "I do not expect to take out money", "points": 4 }
+      ]
+    },
+    {
+      "id": "income_stability",
+      "dimension": "capacity",
+      "prompt": "How stable is your income from sources other than this portfolio?",
+      "options": [
+        { "id": "none", "label": "I have no other regular income", "points": 0 },
+        { "id": "unstable", "label": "It changes a lot", "points": 1 },
+        { "id": "mostly_stable", "label": "It is mostly stable", "points": 3 },
+        { "id": "very_stable", "label": "It is very stable", "points": 4 }
+      ]
+    },
+    {
+      "id": "emergency_savings",
+      "dimension": "capacity",
+      "prompt": "How many months of expenses do you have in savings outside this portfolio?",
+      "options": [
+        { "id": "none", "label": "None", "points": 0 },
+        { "id": "under_3m", "label": "Less than 3 months", "points": 1 },
+        { "id": "3_6m", "label": "3 to 6 months", "points": 3 },
+        { "id": "over_6m", "label": "More than 6 months", "points": 4 }
+      ]
+    },
+    {
+      "id": "goal",
+      "dimension": "willingness",
+      "prompt": "What is the main goal of this portfolio?",
+      "options": [
+        { "id": "preserve", "label": "Keep the money I have", "points": 0 },
+        { "id": "income", "label": "Get regular income", "points": 1 },
+        { "id": "balanced", "label": "Grow slowly with some safety", "points": 2 },
+        { "id": "growth", "label": "Grow over the long term", "points": 3 },
+        { "id": "max_growth", "label": "Grow as much as possible", "points": 4 }
+      ]
+    },
+    {
+      "id": "drawdown_reaction",
+      "dimension": "willingness",
+      "prompt": "This portfolio falls 20% in one month. What do you do?",
+      "options": [
+        { "id": "sell_all", "label": "Sell everything", "points": 0 },
+        { "id": "sell_some", "label": "Sell some of it", "points": 1 },
+        { "id": "hold", "label": "Do nothing and wait", "points": 3 },
+        { "id": "buy_more", "label": "Buy more", "points": 4 }
+      ]
+    },
+    {
+      "id": "max_loss",
+      "dimension": "willingness",
+      "prompt": "What is the largest loss in one year that you can accept?",
+      "options": [
+        { "id": "5pct", "label": "5%", "points": 0 },
+        { "id": "10pct", "label": "10%", "points": 1 },
+        { "id": "20pct", "label": "20%", "points": 2 },
+        { "id": "30pct", "label": "30%", "points": 3 },
+        { "id": "over_30pct", "label": "More than 30%", "points": 4 }
+      ]
+    },
+    {
+      "id": "experience",
+      "dimension": "willingness",
+      "prompt": "How much investing experience do you have?",
+      "options": [
+        { "id": "none", "label": "None", "points": 0 },
+        { "id": "funds", "label": "I have used funds or a retirement plan", "points": 1 },
+        { "id": "stocks", "label": "I buy and sell individual stocks", "points": 3 },
+        { "id": "active", "label": "I trade often and know about volatility", "points": 4 }
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "level": "conservative",
+      "label": "Conservative",
+      "min_score": 0,
+      "description": "Lowest volatility. Accepts lower returns to keep losses small.",
+      "strategy": "min_variance",
+      "max_weight": 0.25,
+      "target_volatility": null
+    },
+    {
+      "level": "moderately_conservative",
+      "label": "Moderately conservative",
+      "min_score": 20,
+      "description": "Low volatility with some room for growth.",
+      "strategy": "target_risk",
+      "max_weight": 0.30,
+      "target_volatility": 0.10
+    },
+    {
+      "level": "moderate",
+      "label": "Moderate",
+      "min_score": 40,
+      "description": "A balance between growth and loss control.",
+      "strategy": "target_risk",
+      "max_weight": 0.35,
+      "target_volatility": 0.12
+    },
+    {
+      "level": "growth",
+      "label": "Growth",
+      "min_score": 60,
+      "description": "Best return for each unit of risk. Accepts larger short-term losses.",
+      "strategy": "max_sharpe",
+      "max_weight": 0.40,
+      "target_volatility": null
+    },
+    {
+      "level": "aggressive",
+      "label": "Aggressive",
+      "min_score": 80,
+      "description": "High volatility for the most growth. Accepts large losses.",
+      "strategy": "target_risk",
+      "max_weight": 0.50,
+      "target_volatility": 0.20
+    }
+  ]
+}

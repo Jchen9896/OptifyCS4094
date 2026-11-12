@@ -28,6 +28,7 @@ include = ["app*"]
 
 [tool.setuptools.package-data]
 "app.chat" = ["corpus/*"]
+"app.onboarding" = ["*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
