@@ -62,7 +62,17 @@ export function useCommunityPage<T extends { id: string }>(
   function more() {
     if (!busy.current && state.kind === 'ready' && state.data.next_cursor) fetchPage(state.data)
   }
-  return { state, reload, more }
+  function invalidate(item?: T) {
+    current.current?.abort()
+    busy.current = false
+    setState(previous => {
+      if (previous.kind !== 'ready') return previous
+      const items = new Map(previous.data.items.map(row => [row.id, row]))
+      if (item) items.set(item.id, item)
+      return { kind: 'ready', data: { ...previous.data, items: [...items.values()], continuation: { kind: 'idle' } } }
+    })
+  }
+  return { state, reload, more, invalidate }
 }
 
 export function useCommunityMutation() {
