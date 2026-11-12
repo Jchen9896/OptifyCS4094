@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Page } from './communitySchemas'
+import { beginCommunityWrite } from './communityDrafts'
 
 export type ReadState<T> =
   | { kind: 'loading' }
@@ -77,23 +78,32 @@ export function useCommunityPage<T extends { id: string }>(
 
 export function useCommunityMutation() {
   const [state, setState] = useState<{ kind: 'idle' } | { kind: 'busy' } | { kind: 'error'; error: unknown }>({ kind: 'idle' })
-  const current = useRef<AbortController | null>(null)
-  useEffect(() => () => { current.current?.abort(); current.current = null }, [])
+  const current = useRef<{ request: AbortController; release: () => void } | null>(null)
+  useEffect(() => () => {
+    current.current?.request.abort()
+    current.current?.release()
+    current.current = null
+  }, [])
   async function run<T>(write: (signal: AbortSignal) => Promise<T>, success: (value: T) => void) {
     if (current.current) return
+    const release = beginCommunityWrite()
+    if (!release) return
     const request = new AbortController()
-    current.current = request
+    current.current = { request, release }
     setState({ kind: 'busy' })
     try {
       const value = await write(request.signal)
       if (request.signal.aborted) return
       current.current = null
+      release()
       setState({ kind: 'idle' })
       success(value)
     } catch (error) {
       if (request.signal.aborted) return
       current.current = null
       setState({ kind: 'error', error })
+    } finally {
+      release()
     }
   }
   return { state, run }

@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom'
 import { createCommunityApi } from './communityApi'
 import type { CommunityApi } from './communityApi'
 import { CommunityProvider } from './CommunityContext'
+import { requestCommunityLeave } from './communityDrafts'
 
 function SessionClient() {
   const { getToken } = useAuth()
@@ -18,7 +19,7 @@ function SessionClient() {
   }, [])
   if (!api) return <p role="status">Loading Community…</p>
   return <CommunityProvider api={api} reauthenticate={() => {
-    if (window.confirm('Sign out and sign in again? Unsaved drafts will be lost.')) void signOut({ redirectUrl: '/login' })
+    if (requestCommunityLeave() && window.confirm('Sign out and sign in again? Unsaved drafts will be lost.')) void signOut({ redirectUrl: '/login' })
   }}><Outlet /></CommunityProvider>
 }
 
