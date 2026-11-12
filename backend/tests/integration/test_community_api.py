@@ -3,12 +3,19 @@
 import uuid
 from datetime import datetime, timezone
 
+from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.auth import ClerkIdentity, get_clerk_identity
 from app.core.current_user import CommunityPrincipal, get_community_principal
+from app.core.db import get_db
 from app.main import create_app
+from app.repositories.community_repository import CommunityRepository
+from app.services.community_service import CommunityService
+from app.api.routes.community import get_community_service
 
 
 def test_every_community_route_requires_authentication():
@@ -28,6 +35,77 @@ def test_every_community_route_requires_authentication():
     for method, path, body in requests:
         response = client.request(method.upper(), path, json=body)
         assert response.status_code == 401, (method, path, response.text)
+
+
+def test_provisioning_rolls_back_on_write_or_commit_failure():
+    engine = create_engine(get_settings().database_url)
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT current_database()")) == "community_test"
+
+    def has_user(identity):
+        with engine.connect() as connection:
+            return connection.scalar(text("SELECT count(*) FROM users WHERE oauth_subject=:subject"), {"subject": identity.subject})
+
+    success_identity = ClerkIdentity("community-first-user", "first-user@example.test", "New Member", None)
+    success_app = create_app()
+    success_app.dependency_overrides[get_clerk_identity] = lambda: success_identity
+    created = TestClient(success_app).post(
+        "/api/community/posts", json={"title": "First post", "body": "Body", "category": "question"}
+    )
+    assert created.status_code == 201 and has_user(success_identity) == 1
+    with engine.begin() as connection:
+        connection.execute(text("DELETE FROM community_posts WHERE author_id=(SELECT id FROM users WHERE oauth_subject=:subject)"), {"subject": success_identity.subject})
+        connection.execute(text("DELETE FROM users WHERE oauth_subject=:subject"), {"subject": success_identity.subject})
+
+    failure_identity = ClerkIdentity("community-write-failure", "write-failure@example.test", "Failure", None)
+    app = create_app()
+    app.dependency_overrides[get_clerk_identity] = lambda: failure_identity
+
+    class FailedWriteService:
+        def create_post(self, _principal, _request):
+            raise RuntimeError("forced write failure")
+
+    app.dependency_overrides[get_community_service] = lambda: FailedWriteService()
+    failed = TestClient(app, raise_server_exceptions=False).post(
+        "/api/community/posts", json={"title": "Title", "body": "Body", "category": "question"}
+    )
+    assert failed.status_code == 500
+    assert has_user(failure_identity) == 0
+
+    commit_identity = ClerkIdentity("community-commit-failure", "commit-failure@example.test", "Failure", None)
+    app = create_app()
+    app.dependency_overrides[get_clerk_identity] = lambda: commit_identity
+
+    class CommitFailureSession(Session):
+        def commit(self):
+            self.rollback()
+            raise RuntimeError("forced commit failure")
+
+    def fail_commit(db: Session = Depends(get_db, scope="function")):
+        class FailureSessionService:
+            def create_post(self, principal, request):
+                return CommunityService(CommunityRepository(db)).create_post(principal, request)
+        return FailureSessionService()
+
+    def commit_failure_database():
+        session = CommitFailureSession(bind=engine)
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = commit_failure_database
+    app.dependency_overrides[get_community_service] = fail_commit
+    failed_commit = TestClient(app, raise_server_exceptions=False).post(
+        "/api/community/posts", json={"title": "Title", "body": "Body", "category": "question"}
+    )
+    assert failed_commit.status_code == 500
+    assert has_user(commit_identity) == 0
+    engine.dispose()
 
 
 def test_post_reply_edit_delete_and_tombstone_response():
