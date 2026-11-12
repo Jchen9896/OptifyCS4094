@@ -145,9 +145,12 @@ class CommunityService:
 
     def _reply(self, row: CommunityReply, viewer: uuid.UUID | None = None) -> ReplyResponse:
         author = row.author
+        reply_author = None
+        if row.deleted_at is None:
+            reply_author = Author(name=author.public_name, picture=author.avatar_url) if author else Author(name="Member", picture=None)
         return ReplyResponse(
             id=row.id, post_id=row.post_id, parent_reply_id=row.parent_reply_id, body=row.body,
             created_at=row.created_at, edited_at=row.edited_at, deleted_at=row.deleted_at,
-            author=Author(name=author.public_name, picture=author.avatar_url) if author and row.deleted_at is None else None,
+            author=reply_author,
             is_mine=row.author_id is not None and row.author_id == viewer,
         )
