@@ -6,6 +6,7 @@ import {
   LineChart,
   LogOut,
   MessageSquare,
+  MessagesSquare,
   Settings,
   SlidersHorizontal,
 } from 'lucide-react'
@@ -27,6 +28,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { requestCommunityLeave } from '@/features/community/communityDrafts'
+import { CommunityMobileMenu } from '@/features/community/CommunityMobileMenu'
 import { getLearnArticle } from '@/features/learn/articles.ts'
 import { useActivePortfolio } from '@/features/portfolio/ActivePortfolioContext.tsx'
 import { cn } from '@/lib/utils'
@@ -39,6 +42,9 @@ function crumbFor(pathname: string): [string, string] {
   if (pathname.startsWith('/compare')) return ['Portfolio', 'Compare portfolios']
   if (pathname.startsWith('/trade')) return ['Trade', 'Trade']
   if (pathname.startsWith('/settings')) return ['Settings', 'Settings']
+  if (pathname === '/community/new') return ['Community', 'New post']
+  if (pathname.startsWith('/community/')) return ['Community', 'Discussion']
+  if (pathname === '/community') return ['Community', 'All posts']
   if (pathname.startsWith('/learn/')) {
     const slug = pathname.slice('/learn/'.length).split('/')[0]
     return ['Learn', getLearnArticle(slug)?.title ?? 'Article']
@@ -81,11 +87,12 @@ export default function AppShell() {
   const { activeLabel } = useActivePortfolio()
   const email = user?.primaryEmailAddress?.emailAddress
   const initials = userInitials(email, user?.firstName)
+  const community = location.pathname === '/community' || location.pathname.startsWith('/community/')
 
   return (
-    <div className="min-h-svh bg-background">
+    <div className={cn("min-h-svh bg-background", community && "community-shell")}>
       <aside
-        className="fixed inset-y-0 left-0 z-20 flex flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground"
+        className="community-sidebar fixed inset-y-0 left-0 z-20 flex flex-col border-r border-sidebar-border bg-sidebar px-3 py-5 text-sidebar-foreground"
         style={{ width: SIDEBAR_WIDTH_PX }}
       >
         <div className="mb-8 flex shrink-0 items-center gap-2.5 px-2">
@@ -142,6 +149,10 @@ export default function AppShell() {
                 <MessageSquare className="size-4" />
                 Assistant
               </NavLink>
+              <NavLink to="/community" className={navLinkClass}>
+                <MessagesSquare className="size-4" />
+                Community
+              </NavLink>
             </nav>
           </div>
         </div>
@@ -176,14 +187,14 @@ export default function AppShell() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer rounded-md px-2.5 py-2"
-                onSelect={() => navigate('/settings')}
+                onSelect={() => { if (requestCommunityLeave()) navigate('/settings') }}
               >
                 <Settings className="size-4" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer rounded-md px-2.5 py-2"
-                onSelect={() => void signOut()}
+                onSelect={() => { if (requestCommunityLeave()) void signOut() }}
               >
                 <LogOut className="size-4" />
                 Sign out
@@ -194,10 +205,11 @@ export default function AppShell() {
       </aside>
 
       <div
-        className="flex min-h-svh min-w-0 flex-col bg-background"
+        className="community-content flex min-h-svh min-w-0 flex-col bg-background"
         style={{ paddingLeft: SIDEBAR_WIDTH_PX }}
       >
-        <header className="flex h-14 shrink-0 items-center border-b border-border bg-card px-8">
+        <header className="community-header flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-8">
+          {community && <CommunityMobileMenu email={email} activeLabel={activeLabel} signOut={() => { if (requestCommunityLeave()) void signOut() }} />}
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
@@ -210,7 +222,7 @@ export default function AppShell() {
             </BreadcrumbList>
           </Breadcrumb>
         </header>
-        <main className="flex-1 px-8 py-7">
+        <main className="community-main min-w-0 flex-1 px-8 py-7">
           <Outlet />
         </main>
       </div>

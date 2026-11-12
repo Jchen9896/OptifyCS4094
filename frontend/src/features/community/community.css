@@ -13,3 +13,11 @@
 .community-markdown pre code { overflow-wrap: normal; white-space: pre; }
 .community-editor { width: 100%; min-height: 10rem; resize: vertical; border: 1px solid var(--input); border-radius: var(--radius); padding: .75rem; background: var(--card); font-size: .875rem; }
 .community-editor:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.community-mobile-menu { display: none; }
+@media (max-width: 1023px) {
+  .community-shell .community-sidebar { display: none; }
+  .community-shell .community-content { padding-left: 0 !important; }
+  .community-shell .community-header { padding-inline: 1rem; }
+  .community-shell .community-main { padding: 1.25rem 1rem; }
+  .community-shell .community-mobile-menu { display: block; }
+}
