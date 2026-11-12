@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +23,7 @@ import {
 import { ApiError } from '@/lib/apiClient'
 import HistoryPeriodPanel from '../history-period/HistoryPeriodPanel.tsx'
 import { ensureHoldingsPrices } from '../history-period/historyApi.ts'
+import type { RecommendedSettingsState } from '../onboarding/onboardingApi.ts'
 import {
   clearLastOptimizationRun,
   deleteOptimizationRun,
@@ -57,6 +58,7 @@ function optionalNumberText(value: number): string {
 
 export default function PortfolioAnalysisPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { userId, isSignedIn, getToken } = useAuth()
   const { pendingDraft, draftRevision, noteSaved, portfolios, activeId } = useActivePortfolio()
   const [portfolioName, setPortfolioName] = useState('')
@@ -66,6 +68,7 @@ export default function PortfolioAnalysisPage() {
   const [riskFree, setRiskFree] = useState('')
   const [targetReturn, setTargetReturn] = useState('')
   const [targetVolatility, setTargetVolatility] = useState('')
+  const [settingsFromProfile, setSettingsFromProfile] = useState(false)
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -144,6 +147,7 @@ export default function PortfolioAnalysisPage() {
     setRiskFree('')
     setTargetReturn('')
     setTargetVolatility('')
+    setSettingsFromProfile(false)
     setHistoryKey((current) => current + 1)
   }
 
@@ -180,6 +184,27 @@ export default function PortfolioAnalysisPage() {
   useEffect(() => {
     if (draftRevision > 0 && pendingDraft) handleLoadPortfolio(pendingDraft)
   }, [draftRevision, pendingDraft])
+
+  // Keep this effect after the portfolio load effect. The load clears the settings, so these must come later.
+  useEffect(() => {
+    const settings = (location.state as RecommendedSettingsState | null)?.recommendedSettings
+    if (!settings) return
+    setSelectedRunId(NEW_RUN_VALUE)
+    setStrategy(settings.strategy)
+    setMaxWeight(settings.maxWeightPercent)
+    setTargetReturn('')
+    setTargetVolatility(settings.targetVolatilityPercent)
+    // The backend checked the recommendation over the saved setup period and rate, so use the same values.
+    if (pendingDraft) {
+      setStartDate(pendingDraft.startDate)
+      setEndDate(pendingDraft.endDate)
+      setRiskFree(String(pendingDraft.riskFreePercent))
+      setHistoryKey((current) => current + 1)
+    }
+    setSettingsFromProfile(true)
+    // Remove the state, so a page reload does not apply the settings again.
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.pathname, navigate, pendingDraft])
 
   const refreshRuns = useCallback(async () => {
     if (!activeId || !isSignedIn) {
@@ -563,6 +588,16 @@ export default function PortfolioAnalysisPage() {
         <Card className="h-fit xl:sticky xl:top-6">
           <CardHeader>
             <CardTitle>Analysis settings</CardTitle>
+            {activeId && (
+              <CardDescription>
+                {settingsFromProfile
+                  ? 'These settings come from your risk profile. You can change them. '
+                  : 'Not sure which settings to use? '}
+                <Link to={`/portfolios/${activeId}/risk-profile`} className="underline">
+                  {settingsFromProfile ? 'View risk profile' : 'Take the risk questionnaire'}
+                </Link>
+              </CardDescription>
+            )}
           </CardHeader>
           <CardContent>
             <FieldGroup>

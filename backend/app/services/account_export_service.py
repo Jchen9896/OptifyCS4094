@@ -16,6 +16,7 @@ from app.models.brokerage_credential import BrokerageCredential
 from app.models.optimization_run import OptimizationRun
 from app.models.portfolio import Portfolio
 from app.models.portfolio_position import PortfolioHolding
+from app.models.portfolio_risk_profile import PortfolioRiskProfile
 from app.models.user import User
 
 
@@ -49,6 +50,14 @@ class AccountExportService:
             )
             for run in runs:
                 runs_by_portfolio.setdefault(run.portfolio_id, []).append(run)
+        risk_profiles: dict[uuid.UUID, PortfolioRiskProfile] = {}
+        if portfolio_ids:
+            risk_profiles = {
+                row.portfolio_id: row
+                for row in self._db.scalars(
+                    select(PortfolioRiskProfile).where(PortfolioRiskProfile.portfolio_id.in_(portfolio_ids))
+                )
+            }
 
         credentials = list(
             self._db.scalars(
@@ -89,10 +98,25 @@ class AccountExportService:
                         }
                         for run in runs_by_portfolio.get(portfolio.id, [])
                     ],
+                    "risk_profile": self._risk_profile(risk_profiles.get(portfolio.id)),
                 }
                 for portfolio in portfolios
             ],
             "brokerage_connections": [self._brokerage_status(row) for row in credentials],
+        }
+
+    def _risk_profile(self, row: PortfolioRiskProfile | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        return {
+            "questionnaire_version": row.questionnaire_version,
+            "answers": row.answers,
+            "capacity_score": row.capacity_score,
+            "willingness_score": row.willingness_score,
+            "score": row.score,
+            "level": row.level,
+            "recommendation": row.recommendation,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
     def _brokerage_status(self, row: BrokerageCredential) -> dict[str, Any]:
