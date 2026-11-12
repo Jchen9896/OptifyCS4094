@@ -25,10 +25,10 @@ export function createCommunityApi({
   function check(signal: AbortSignal) {
     signal.throwIfAborted()
     lifetime.signal.throwIfAborted()
+    if (expired) throw new CommunityError('session', 'Your session has expired. Sign in to continue.')
   }
   async function request<T>(path: string, schema: z.ZodType<T>, signal: AbortSignal, method = 'GET', body?: unknown): Promise<T> {
     check(signal)
-    if (expired) throw new CommunityError('session', 'Your session has expired. Sign in to continue.')
     const token = await getToken()
     check(signal)
     if (!token) {
@@ -78,9 +78,9 @@ export function createCommunityApi({
     posts: (category: string, cursor: string | null, signal: AbortSignal) =>
       request('/posts' + query({ category, cursor }), postPageSchema, signal),
     post: (id: string, signal: AbortSignal) => request('/posts/' + encodeURIComponent(id), postSchema, signal),
-    createPost: (input: PostInput, signal: AbortSignal) => request('/posts', postSchema, signal, 'POST', input),
+    createPost: (input: PostInput, signal: AbortSignal) => request('/posts', postSchema, signal, 'POST', { title: input.title, body: input.body, category: input.category }),
     updatePost: (id: string, input: PostInput, signal: AbortSignal) =>
-      request('/posts/' + encodeURIComponent(id), postSchema, signal, 'PATCH', input),
+      request('/posts/' + encodeURIComponent(id), postSchema, signal, 'PATCH', { title: input.title, body: input.body, category: input.category }),
     deletePost: (id: string, signal: AbortSignal) =>
       request('/posts/' + encodeURIComponent(id), z.undefined(), signal, 'DELETE'),
     replies: (id: string, parent: string | null, cursor: string | null, signal: AbortSignal) =>

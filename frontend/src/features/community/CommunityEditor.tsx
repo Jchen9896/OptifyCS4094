@@ -32,7 +32,7 @@ export function MarkdownEditor({ value, onChange, maxLength, label, disabled = f
 export function PostEditor({ initial, categories, busy, onSubmit, onCancel }: {
   initial: PostInput; categories: Category[]; busy: boolean; onSubmit: (input: PostInput) => void; onCancel: () => void
 }) {
-  const [draft, setDraft] = useState(initial)
+  const [draft, setDraft] = useState<PostInput>(() => ({ title: initial.title, body: initial.body, category: initial.category }))
   const id = useId()
   const dirty = draft.title !== initial.title || draft.body !== initial.body || draft.category !== initial.category
   useDraftWarning(dirty)

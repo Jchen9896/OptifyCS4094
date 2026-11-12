@@ -18,11 +18,14 @@ describe('Community boundary', () => {
       fetcher: async (_url, init) => { requests.push(init!); return Response.json(post) },
     })
     await api.createPost({ title: post.title, body: post.body, category: post.category }, signal())
-    await api.post(post.id, signal())
+    await api.updatePost(post.id, post, signal())
     expect(requests.map(r => r.headers)).toEqual([
-      { Authorization: 'Bearer token1', 'Content-Type': 'application/json' }, { Authorization: 'Bearer token2' },
+      { Authorization: 'Bearer token1', 'Content-Type': 'application/json' }, { Authorization: 'Bearer token2', 'Content-Type': 'application/json' },
     ])
-    expect(JSON.parse(String(requests[0].body))).toEqual({ title: post.title, body: post.body, category: post.category })
+    expect(requests.map(request => JSON.parse(String(request.body)))).toEqual([
+      { title: post.title, body: post.body, category: post.category },
+      { title: post.title, body: post.body, category: post.category },
+    ])
   })
   it('accepts empty deletes and rejects malformed success responses', async () => {
     const api = createCommunityApi({ getToken: async () => 'token', fetcher: async () => new Response(null, { status: 204 }) })
@@ -49,6 +52,20 @@ describe('Community boundary', () => {
     const api = createCommunityApi({ getToken: async () => 'token', fetcher: async () => { requests++; return new Response(null, { status: 401 }) } })
     await expect(api.post(post.id, signal())).rejects.toBeInstanceOf(CommunityError)
     await expect(api.createPost(post, signal())).rejects.toMatchObject({ kind: 'session' })
+    expect(requests).toBe(1)
+  })
+  it('stops a waiting-token write when another request expires the session', async () => {
+    let finish: (token: string) => void = () => {}
+    let tokens = 0
+    let requests = 0
+    const api = createCommunityApi({
+      getToken: () => ++tokens === 1 ? new Promise(resolve => { finish = resolve }) : Promise.resolve('expired'),
+      fetcher: async () => { requests++; return new Response(null, { status: 401 }) },
+    })
+    const write = api.createPost(post, signal())
+    await expect(api.post(post.id, signal())).rejects.toMatchObject({ kind: 'session' })
+    finish('old-token')
+    await expect(write).rejects.toMatchObject({ kind: 'session' })
     expect(requests).toBe(1)
   })
   it('rejects completions from a disposed account even when fetch ignores abort', async () => {
