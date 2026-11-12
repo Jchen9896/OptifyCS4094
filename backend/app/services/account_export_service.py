@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import Settings, get_settings
 from app.core.secret_box import decrypt_json
 from app.models.brokerage_credential import BrokerageCredential
+from app.models.community import CommunityPost, CommunityReply
 from app.models.optimization_run import OptimizationRun
 from app.models.portfolio import Portfolio
 from app.models.portfolio_position import PortfolioHolding
@@ -50,6 +51,16 @@ class AccountExportService:
             for run in runs:
                 runs_by_portfolio.setdefault(run.portfolio_id, []).append(run)
 
+        community_posts = list(
+            self._db.scalars(
+                select(CommunityPost).where(CommunityPost.author_id == user_id).order_by(CommunityPost.created_at, CommunityPost.id)
+            )
+        )
+        community_replies = list(
+            self._db.scalars(
+                select(CommunityReply).where(CommunityReply.author_id == user_id).order_by(CommunityReply.created_at, CommunityReply.id)
+            )
+        )
         credentials = list(
             self._db.scalars(
                 select(BrokerageCredential)
@@ -93,6 +104,25 @@ class AccountExportService:
                 for portfolio in portfolios
             ],
             "brokerage_connections": [self._brokerage_status(row) for row in credentials],
+            "community_posts": [
+                {
+                    "id": str(row.id), "category": row.category, "title": row.title, "body": row.body,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "edited_at": row.edited_at.isoformat() if row.edited_at else None,
+                }
+                for row in community_posts
+            ],
+            "community_replies": [
+                {
+                    "id": str(row.id), "post_id": str(row.post_id),
+                    "parent_reply_id": str(row.parent_reply_id) if row.parent_reply_id else None,
+                    "body": row.body,
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "edited_at": row.edited_at.isoformat() if row.edited_at else None,
+                    "deleted_at": row.deleted_at.isoformat() if row.deleted_at else None,
+                }
+                for row in community_replies
+            ],
         }
 
     def _brokerage_status(self, row: BrokerageCredential) -> dict[str, Any]:

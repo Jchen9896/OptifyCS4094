@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.current_user import get_current_user_id
 from app.core.db import Base, get_db
 from app.main import create_app
+from app.models.community import CommunityCategory, CommunityPost, CommunityReply
 from app.models.portfolio import Portfolio
 from app.models.user import User
 
@@ -65,6 +66,28 @@ def test_export_account_data_includes_portfolios(api):
     assert len(payload["portfolios"]) == 1
     assert payload["portfolios"][0]["name"] == "Core"
     assert payload["brokerage_connections"] == []
+
+
+def test_export_includes_only_own_community_content(api):
+    client, owner, engine, user_id = api
+    with Session(engine) as session:
+        other = User(email="other@example.com", password_hash="test-only")
+        session.add_all([other, CommunityCategory(slug="question", label="Question")])
+        session.flush()
+        other_id = other.id
+        post = CommunityPost(author_id=user_id, category="question", title="Mine", body="My body")
+        other_post = CommunityPost(author_id=other.id, category="question", title="Other", body="Private")
+        session.add_all([post, other_post])
+        session.flush()
+        session.add(CommunityReply(post_id=post.id, author_id=user_id, body="My reply"))
+        session.add(CommunityReply(post_id=other_post.id, author_id=other.id, body="Other reply"))
+        session.commit()
+
+    payload = client.get("/api/account/export", headers=owner).json()
+    assert [row["title"] for row in payload["community_posts"]] == ["Mine"]
+    assert [row["body"] for row in payload["community_replies"]] == ["My reply"]
+    assert "Other" not in str(payload["community_posts"])
+    assert str(other_id) not in str(payload)
 
 
 def test_delete_account_removes_user_and_portfolios(api):
