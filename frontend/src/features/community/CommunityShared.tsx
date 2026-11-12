@@ -50,8 +50,8 @@ export function PageContinuation<T>({ state, more, reload }: { state: PageState<
   </div>
 }
 
-export function DeleteCommunityItem({ kind, remove, onDeleted }: {
-  kind: 'post' | 'reply'; remove: (signal: AbortSignal) => Promise<void>; onDeleted: () => void
+export function DeleteCommunityItem({ kind, remove, onDeleted, restoreFocus }: {
+  kind: 'post' | 'reply'; remove: (signal: AbortSignal) => Promise<void>; onDeleted: () => void; restoreFocus?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
@@ -62,7 +62,11 @@ export function DeleteCommunityItem({ kind, remove, onDeleted }: {
     <Button ref={trigger} size="sm" variant="ghost" onClick={() => setOpen(true)}>Delete</Button>
     <Dialog open={open} onOpenChange={next => { if (!busy) setOpen(next) }}>
       <DialogContent onOpenAutoFocus={event => { event.preventDefault(); cancel.current?.focus() }}
-        onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus() }}>
+        onCloseAutoFocus={event => {
+          event.preventDefault()
+          if (trigger.current?.isConnected) trigger.current.focus()
+          else restoreFocus?.()
+        }}>
         <DialogTitle>Delete {kind}?</DialogTitle>
         <DialogDescription>{kind === 'post' ? 'This permanently removes the post and its entire discussion.' : 'Your reply becomes a deleted placeholder. Replies to it remain available.'}</DialogDescription>
         {mutation.state.kind === 'error' && <CommunityFailure error={mutation.state.error} write />}

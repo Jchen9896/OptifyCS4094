@@ -42,6 +42,7 @@ describe('discussion ownership and lazy siblings', () => {
     expect(screen.queryByText('Parent text')).toBeNull()
     expect(screen.getByText('Child text')).toBeTruthy()
     expect(within(parent).queryByRole('button', { name: 'Delete' })).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(within(parent).getAllByRole('button', { name: 'Reply' })[0]))
   })
   it('renders authoritative tombstones without text, author or owner actions', async () => {
     show(async url => {

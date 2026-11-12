@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useCommunity } from './CommunityContext'
 import { CommunityMarkdown } from './CommunityMarkdown'
@@ -15,6 +15,7 @@ function ReplyNode({ reply, depth, update, invalidate }: {
   const [composing, setComposing] = useState(false)
   const [editing, setEditing] = useState(false)
   const [removed, setRemoved] = useState(false)
+  const replyAction = useRef<HTMLButtonElement>(null)
   const mutation = useCommunityMutation()
   const live = !removed && reply.deleted_at === null
   return <li className="min-w-0 space-y-3 border-t py-4 first:border-t-0">
@@ -31,10 +32,10 @@ function ReplyNode({ reply, depth, update, invalidate }: {
     </> : <p className="text-sm italic text-muted-foreground">This reply was deleted.</p>}
     <div className="flex flex-wrap gap-1">
       {!expanded && <Button size="sm" variant="ghost" onClick={() => setExpanded(true)}>Show replies</Button>}
-      <Button size="sm" variant="ghost" onClick={() => { setExpanded(true); setComposing(true) }}>Reply</Button>
+      <Button ref={replyAction} size="sm" variant="ghost" onClick={() => { setExpanded(true); setComposing(true) }}>Reply</Button>
       {live && reply.is_mine && !editing && <>
         <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
-        <DeleteCommunityItem kind="reply" remove={signal => api.deleteReply(reply.post_id, reply.id, signal)} onDeleted={() => {
+        <DeleteCommunityItem kind="reply" restoreFocus={() => replyAction.current?.focus()} remove={signal => api.deleteReply(reply.post_id, reply.id, signal)} onDeleted={() => {
           setRemoved(true)
           invalidate()
         }} />
