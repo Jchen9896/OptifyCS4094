@@ -231,3 +231,24 @@ Saves one completed analysis for an owned portfolio (Decision 012). Requires a C
 **404** `portfolio_not_found` if the portfolio is missing or has another owner.
 
 **404** `optimization_run_not_found` if the run is missing for that portfolio.
+
+## Community forum
+
+All routes under `/api/community` require a valid Clerk session. The API resolves the signed-in account and ignores caller-supplied author fields. Responses expose the public name and optional avatar, never an email address or Clerk subject. Missing or invalid names display as `Member`.
+
+- `GET /api/community/categories` returns the seeded `question`, `discussion`, and `portfolio` categories.
+- `POST /api/community/posts` creates a post with `title`, `body`, and `category`.
+- `GET /api/community/posts` lists posts newest first. Optional `category`, `cursor`, and `limit` filters apply.
+- `GET /api/community/posts/{post_id}` reads one post.
+- `PATCH /api/community/posts/{post_id}` edits `title`, `body`, or `category` for the author.
+- `DELETE /api/community/posts/{post_id}` deletes the post and its entire reply tree.
+- `GET /api/community/posts/{post_id}/replies` lists direct children only. Optional `parent_reply_id`, `cursor`, and `limit` select a sibling page.
+- `POST /api/community/posts/{post_id}/replies` adds a reply with `body` and optional `parent_reply_id`.
+- `PATCH /api/community/posts/{post_id}/replies/{reply_id}` edits the reply body for its author.
+- `DELETE /api/community/posts/{post_id}/replies/{reply_id}` replaces the reply body with a tombstone. Descendants remain available.
+
+Post titles are limited to 160 characters, post bodies to 10,000, and reply bodies to 4,000. Page size defaults to 20 and cannot exceed 50. Cursors are opaque, versioned, and bound to the category or post and parent scope. A malformed cursor or a cursor from another scope returns **422** `invalid_cursor`. Posts sort newest first. Replies sort oldest first. Both use UUIDs to break timestamp ties.
+
+An edit sets `edited_at`. A reply tombstone has a null body and author, plus `deleted_at`. A deleted reply cannot be edited. The same author can repeat the delete request and receives **204**. A missing item and an item owned by another account return the same **404**.
+
+Deleting an account anonymizes its Community posts and replies by setting author references to null. The content remains. The forum then displays `Member` for an anonymized post and hides the tombstoned reply author. Account export contains only the signed-in user's own Community posts and replies.

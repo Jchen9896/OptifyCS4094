@@ -130,7 +130,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   const sessionRun = useMemo(() => {
-    const stored = loadLastOptimizationRun(userId, activeId)
+    const stored = loadLastOptimizationRun(userId ?? null, activeId)
     return stored ? fromSession(stored, activeLabel) : null
   }, [userId, activeId, activeLabel])
 

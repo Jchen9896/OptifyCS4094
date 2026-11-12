@@ -458,7 +458,7 @@ export default function PortfolioAnalysisPage() {
           saveNote: persistNote,
           portfolioId,
         },
-        userId,
+        userId ?? null,
         portfolioId,
       )
       navigate('/')

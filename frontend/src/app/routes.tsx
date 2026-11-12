@@ -4,6 +4,10 @@ import { useAuth } from '@clerk/react'
 import AppShell from '../components/layout/AppShell.tsx'
 import LoginPage from '../features/auth/LoginPage.tsx'
 import RiskProfilePage from '../features/onboarding/RiskProfilePage.tsx'
+import CommunitySession from '../features/community/CommunitySession.tsx'
+import CommunityFeedPage from '../features/community/CommunityFeedPage.tsx'
+import CommunityNewPage from '../features/community/CommunityNewPage.tsx'
+import CommunityPostPage from '../features/community/CommunityPostPage.tsx'
 import ComparePage from '../features/comparison/ComparePage.tsx'
 import DashboardPage from '../features/dashboard/DashboardPage.tsx'
 import ChatPage from '../features/chat/ChatPage.tsx'
@@ -75,6 +79,11 @@ export function AppRoutes() {
           <Route path="learn/:slug" element={<LearnArticlePage />} />
           <Route path="assistant" element={<ChatPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="community" element={<CommunitySession />}>
+            <Route index element={<CommunityFeedPage />} />
+            <Route path="new" element={<CommunityNewPage />} />
+            <Route path=":postId" element={<CommunityPostPage />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

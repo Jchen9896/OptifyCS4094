@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes.account import router as account_router
 from app.api.routes.brokerage_credentials import router as brokerage_credentials_router
 from app.api.routes.chat import router as chat_router
+from app.api.routes.community import router as community_router
 from app.api.routes.health import router as health_router
 from app.api.routes.market_data import router as market_data_router
 from app.api.routes.onboarding import router as onboarding_router
@@ -17,6 +18,7 @@ api_router.include_router(health_router)
 api_router.include_router(account_router)
 api_router.include_router(brokerage_credentials_router)
 api_router.include_router(chat_router)
+api_router.include_router(community_router)
 api_router.include_router(stocks_router)
 api_router.include_router(market_data_router)
 api_router.include_router(optimizations_router)

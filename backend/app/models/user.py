@@ -26,6 +26,8 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(Text)
     oauth_provider: Mapped[str | None] = mapped_column(Text)
     oauth_subject: Mapped[str | None] = mapped_column(Text)
+    public_name: Mapped[str] = mapped_column(Text, nullable=False, default="Member")
+    avatar_url: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

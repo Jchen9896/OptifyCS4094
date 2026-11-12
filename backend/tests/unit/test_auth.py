@@ -33,6 +33,12 @@ def test_clerk_session_verification():
 
     assert verify({}).subject == "user_123"
     assert verify({}).email == "person@example.com"
+    assert verify({}).name == "Member"
+    assert verify({"name": "Taylor", "picture": "https://images.clerk.dev/avatar.png"}).name == "Taylor"
+    assert verify({"picture": "http://images.clerk.dev/avatar.png"}).picture is None
+    assert verify({"picture": "https://evil.example/avatar.png"}).picture is None
+    for bad_name in ("", "person@example.com", "x" * 81, "\x00bad"):
+        assert verify({"name": bad_name}).name == "Member"
     assert verify({"iss": f"{settings.clerk_issuer}/"}).subject == "user_123"
     without_origin = claims.copy()
     del without_origin["azp"]

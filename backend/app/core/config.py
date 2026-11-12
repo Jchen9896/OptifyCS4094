@@ -3,6 +3,13 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+COMMUNITY_TITLE_MAX = 160
+COMMUNITY_POST_BODY_MAX = 10000
+COMMUNITY_REPLY_BODY_MAX = 4000
+COMMUNITY_PROFILE_NAME_MAX = 80
+COMMUNITY_AVATAR_URL_MAX = 2048
+
+
 class Settings(BaseSettings):
     """Runtime settings. Copy `.env.example` to `.env` and adjust locally."""
 
@@ -10,6 +17,9 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
     clerk_issuer: str = ""
     clerk_jwt_key: str = ""
+    community_avatar_hosts: str = "images.clerk.dev,img.clerk.com"
+    community_page_size: int = 20
+    community_page_max: int = 50
     # Fernet key for per-user brokerage BYOK secrets (url-safe base64, 32 bytes).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     credentials_fernet_key: str = ""

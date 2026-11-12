@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.auth import ClerkIdentity
 from app.core.db import Base
-from app.core.current_user import resolve_user
+from app.core.current_user import get_community_principal, resolve_user
 from app.models.user import User
 
 
@@ -27,6 +27,15 @@ def test_first_and_repeat_login_keep_same_local_id(db):
     assert isinstance(first, uuid.UUID)
     assert resolve_user(identity, db) == first
     assert db.query(User).count() == 1
+
+
+def test_community_principal_resolves_user_and_signed_profile(db):
+    principal = get_community_principal(ClerkIdentity("user_123", "person@example.com", "Taylor", None), db)
+    user = db.get(User, principal.user_id)
+    assert principal.name == "Taylor"
+    assert principal.picture is None
+    assert user.email == "person@example.com"
+    assert user.public_name == "Member"
 
 
 def test_existing_email_cannot_transfer_account(db):

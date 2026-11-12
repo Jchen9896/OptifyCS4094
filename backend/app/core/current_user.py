@@ -1,6 +1,7 @@
 """Map a verified Clerk account to the existing local user row."""
 
 import uuid
+from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException
 from sqlalchemy import select
@@ -29,6 +30,20 @@ def resolve_user(identity: ClerkIdentity, db: Session) -> uuid.UUID:
         if account:
             return account.id
         raise HTTPException(status_code=409, detail="Email already belongs to another account")
+
+
+@dataclass(frozen=True)
+class CommunityPrincipal:
+    user_id: uuid.UUID
+    name: str
+    picture: str | None
+
+
+def get_community_principal(
+    identity: ClerkIdentity = Depends(get_clerk_identity),
+    db: Session = Depends(get_db, scope="function"),
+) -> CommunityPrincipal:
+    return CommunityPrincipal(resolve_user(identity, db), identity.name, identity.picture)
 
 
 def get_current_user_id(
