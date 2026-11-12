@@ -109,7 +109,7 @@
       "description": "Low volatility with some room for growth.",
       "strategy": "target_risk",
       "max_weight": 0.30,
-      "target_volatility": 0.08
+      "target_volatility": 0.10
     },
     {
       "level": "moderate",
