@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:community": "vitest run tests/community",
+    "dev:community-fixture": "vite --config tests/community/vite.config.ts"
   },
   "dependencies": {
     "@clerk/react": "^6.18.6",
