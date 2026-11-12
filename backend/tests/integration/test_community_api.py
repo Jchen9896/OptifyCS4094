@@ -5,10 +5,9 @@ from datetime import datetime, timezone
 
 from fastapi import Depends
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core.auth import ClerkIdentity, get_clerk_identity
 from app.core.current_user import CommunityPrincipal, get_community_principal
 from app.core.db import get_db
@@ -37,10 +36,8 @@ def test_every_community_route_requires_authentication():
         assert response.status_code == 401, (method, path, response.text)
 
 
-def test_provisioning_rolls_back_on_write_or_commit_failure():
-    engine = create_engine(get_settings().database_url)
-    with engine.connect() as connection:
-        assert connection.scalar(text("SELECT current_database()")) == "community_test"
+def test_provisioning_rolls_back_on_write_or_commit_failure(community_test_engine):
+    engine = community_test_engine
 
     def has_user(identity):
         with engine.connect() as connection:
@@ -105,13 +102,10 @@ def test_provisioning_rolls_back_on_write_or_commit_failure():
     )
     assert failed_commit.status_code == 500
     assert has_user(commit_identity) == 0
-    engine.dispose()
 
 
-def test_post_reply_edit_delete_and_tombstone_response():
-    engine = create_engine(get_settings().database_url)
-    with engine.connect() as connection:
-        assert connection.scalar(text("SELECT current_database()")) == "community_test"
+def test_post_reply_edit_delete_and_tombstone_response(community_test_engine):
+    engine = community_test_engine
     owner_id, other_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as connection:
         for user_id in (owner_id, other_id):
@@ -185,4 +179,3 @@ def test_post_reply_edit_delete_and_tombstone_response():
     with engine.begin() as connection:
         connection.execute(text("DELETE FROM community_posts WHERE author_id=:owner"), {"owner": owner_id})
         connection.execute(text("DELETE FROM users WHERE id IN (:owner,:other)"), {"owner": owner_id, "other": other_id})
-    engine.dispose()

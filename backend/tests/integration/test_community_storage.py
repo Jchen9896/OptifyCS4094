@@ -2,16 +2,11 @@
 
 import uuid
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
-
-from app.core.config import get_settings
+from sqlalchemy import text
 
 
-def test_community_reply_parent_cannot_cross_posts_and_post_delete_cascades():
-    engine = create_engine(get_settings().database_url)
-    with engine.connect() as connection:
-        assert connection.scalar(text("SELECT current_database()")) == "community_test"
+def test_community_reply_parent_cannot_cross_posts_and_post_delete_cascades(community_test_engine):
+    engine = community_test_engine
     with engine.begin() as connection:
         user_id = uuid.uuid4()
         post_a, post_b = uuid.uuid4(), uuid.uuid4()
@@ -50,4 +45,3 @@ def test_community_reply_parent_cannot_cross_posts_and_post_delete_cascades():
         assert connection.scalar(text("SELECT body FROM community_replies WHERE post_id=:id"), {"id": post_b}) == "retained"
         assert connection.scalar(text("SELECT author_id FROM community_replies WHERE post_id=:id"), {"id": post_b}) is None
         connection.execute(text("DELETE FROM community_posts WHERE id=:id"), {"id": post_b})
-    engine.dispose()
