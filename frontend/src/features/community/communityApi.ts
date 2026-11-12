@@ -45,9 +45,9 @@ export function createCommunityApi({
       let code: unknown
       try {
         const value: unknown = await response.json()
-        const parsed = z.object({ error: z.object({ code: z.string() }) }).safeParse(value)
-        code = parsed.success ? parsed.data.error.code : undefined
-      } catch { /* An error response can have no JSON body. */ }
+        const parsed = z.object({ detail: z.object({ code: z.string() }) }).safeParse(value)
+        code = parsed.success ? parsed.data.detail.code : undefined
+      } catch {}
       check(signal)
       if (response.status === 401) {
         expired = true

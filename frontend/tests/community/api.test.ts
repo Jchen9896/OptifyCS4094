@@ -40,6 +40,10 @@ describe('Community boundary', () => {
     const api = createCommunityApi({ getToken: async () => 'token', fetcher: async () => new Response(null, { status: Number(status) }) })
     await expect(api.post(post.id, signal())).rejects.toMatchObject({ kind })
   })
+  it('recognizes the backend invalid-cursor detail envelope', async () => {
+    const api = createCommunityApi({ getToken: async () => 'token', fetcher: async () => Response.json({ detail: { code: 'invalid_cursor', message: 'Invalid' } }, { status: 422 }) })
+    await expect(api.posts('', 'old', signal())).rejects.toMatchObject({ kind: 'cursor' })
+  })
   it('stops writes after expiry without retrying', async () => {
     let requests = 0
     const api = createCommunityApi({ getToken: async () => 'token', fetcher: async () => { requests++; return new Response(null, { status: 401 }) } })
