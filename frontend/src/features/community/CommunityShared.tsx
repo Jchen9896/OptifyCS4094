@@ -23,6 +23,10 @@ export function CommunityAuthor({ author, createdAt, editedAt }: { author: Autho
   </div>
 }
 
+export function CommunityWritePending() {
+  return <p role="status" className="text-sm text-muted-foreground">A Community write is pending. Wait for the result before leaving. Closing this page does not undo the write. If interrupted, check the discussion before submitting again.</p>
+}
+
 export function CommunityFailure({ error, retry, write = false }: { error: unknown; retry?: () => void; write?: boolean }) {
   const { reauthenticate } = useCommunity()
   const expired = error instanceof CommunityError && error.kind === 'session'
@@ -70,6 +74,7 @@ export function DeleteCommunityItem({ kind, remove, onDeleted, restoreFocus }: {
         <DialogTitle>Delete {kind}?</DialogTitle>
         <DialogDescription>{kind === 'post' ? 'This permanently removes the post and its entire discussion.' : 'Your reply becomes a deleted placeholder. Replies to it remain available.'}</DialogDescription>
         {mutation.state.kind === 'error' && <CommunityFailure error={mutation.state.error} write />}
+        {busy && <CommunityWritePending />}
         <DialogFooter>
           <Button ref={cancel} variant="outline" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
           <Button variant="destructive" disabled={busy} onClick={() => void mutation.run(remove, () => { setOpen(false); onDeleted() })}>

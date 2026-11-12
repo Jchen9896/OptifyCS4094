@@ -3,6 +3,7 @@ import { useDraftWarning } from './communityDrafts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CommunityMarkdown } from './CommunityMarkdown'
+import { CommunityWritePending } from './CommunityShared'
 import { limits } from './communitySchemas'
 import type { Category, PostInput } from './communitySchemas'
 
@@ -48,6 +49,7 @@ export function PostEditor({ initial, categories, busy, onSubmit, onCancel }: {
         {categories.map(category => <option key={category.slug} value={category.slug}>{category.label}</option>)}
       </select></div>
     <MarkdownEditor label="Post" value={draft.body} onChange={body => setDraft({ ...draft, body })} maxLength={limits.post} disabled={busy} />
+    {busy && <CommunityWritePending />}
     <div className="flex flex-wrap gap-2">
       <Button type="submit" disabled={!valid || busy}>{busy ? 'Saving…' : 'Save post'}</Button>
       <Button type="button" variant="outline" disabled={busy} onClick={() => { if (!dirty || window.confirm('Discard your unsaved draft?')) onCancel() }}>Cancel</Button>
@@ -62,6 +64,7 @@ export function ReplyEditor({ initial = '', busy, onSubmit, onCancel, label = 'Y
   useDraftWarning(body !== initial)
   return <form className="min-w-0 space-y-3" onSubmit={event => { event.preventDefault(); if (body.trim() && !busy) onSubmit(body) }}>
     <MarkdownEditor label={label} value={body} onChange={setBody} maxLength={limits.reply} disabled={busy} />
+    {busy && <CommunityWritePending />}
     <div className="flex flex-wrap gap-2">
       <Button type="submit" size="sm" disabled={!body.trim() || busy}>{busy ? 'Saving…' : 'Save reply'}</Button>
       {onCancel && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
