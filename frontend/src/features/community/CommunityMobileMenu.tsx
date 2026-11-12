@@ -19,7 +19,15 @@ export function CommunityMobileMenu({ email, activeLabel, signOut }: {
   return <div className="community-mobile-menu">
     <Button ref={trigger} size="icon" variant="ghost" aria-label="Open navigation" onClick={() => setOpen(true)}><Menu className="size-5" /></Button>
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus() }}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto" onCloseAutoFocus={event => {
+        event.preventDefault()
+        if (trigger.current?.isConnected) trigger.current.focus()
+        else {
+          const destination = document.querySelector<HTMLElement>('main h1') ?? document.querySelector<HTMLElement>('main')
+          destination?.setAttribute('tabindex', '-1')
+          destination?.focus()
+        }
+      }}>
         <DialogTitle>Optify navigation</DialogTitle>
         <DialogDescription>Navigate your workspace or manage your account.</DialogDescription>
         <nav aria-label="Main navigation" className="grid gap-1">
