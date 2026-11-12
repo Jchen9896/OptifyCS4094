@@ -15,7 +15,7 @@ const child = { ...reply, id: '33333333-3333-4333-8333-333333333333', parent_rep
 function show(fetcher: typeof fetch) {
   const api = createCommunityApi({ getToken: async () => 'fixture', fetcher })
   return render(<MemoryRouter initialEntries={['/community/' + post.id]}><CommunityProvider api={api} reauthenticate={() => {}}>
-    <Routes><Route path="/community/:postId" element={<CommunityPostPage />} /></Routes>
+    <Routes><Route path="/community/:postId" element={<CommunityPostPage />} /><Route path="/community" element={<p>Community feed destination</p>} /></Routes>
   </CommunityProvider></MemoryRouter>)
 }
 afterEach(cleanup)
@@ -55,6 +55,40 @@ describe('discussion ownership and lazy siblings', () => {
     expect(within(row).queryByRole('button', { name: 'Delete' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Edit post' })).toBeNull()
     expect(within(row).getByRole('button', { name: 'Show replies' })).toBeTruthy()
+  })
+  it('retains a failed reply edit and replaces it only with the saved response', async () => {
+    let attempts = 0
+    show(async (url, init) => {
+      if (String(url).endsWith('/categories')) return Response.json([])
+      if (init?.method === 'PATCH') return ++attempts === 1
+        ? new Response(null, { status: 503 }) : Response.json({ ...reply, body: 'Authoritative edit', edited_at: post.created_at })
+      if (String(url).includes('/replies')) return Response.json({ items: [reply], next_cursor: null })
+      return Response.json(post)
+    })
+    const row = (await screen.findByText('Parent text')).closest('li')!
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('Edit reply'), { target: { value: 'Keep edit draft' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Save reply' }))
+    await screen.findByRole('alert')
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Edit reply').value).toBe('Keep edit draft')
+    fireEvent.click(within(row).getByRole('button', { name: 'Save reply' }))
+    await screen.findByText('Authoritative edit')
+    expect(screen.queryByLabelText('Edit reply')).toBeNull()
+  })
+  it('returns to the feed only after confirmed post deletion succeeds', async () => {
+    let deleted = false
+    show(async (url, init) => {
+      if (init?.method === 'DELETE') { deleted = true; return new Response(null, { status: 204 }) }
+      if (String(url).endsWith('/categories')) return Response.json([])
+      if (String(url).includes('/replies')) return Response.json({ items: [], next_cursor: null })
+      return Response.json(post)
+    })
+    await screen.findByRole('heading', { name: 'A question' })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(deleted).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete post' }))
+    await screen.findByText('Community feed destination')
+    expect(deleted).toBe(true)
   })
   it('edits an owned post using the authoritative response without clearing sibling drafts', async () => {
     show(async (url, init) => {
