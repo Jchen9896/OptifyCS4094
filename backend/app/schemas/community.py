@@ -6,14 +6,16 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.config import COMMUNITY_POST_BODY_MAX, COMMUNITY_REPLY_BODY_MAX, COMMUNITY_TITLE_MAX
+
 
 class CommunityRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
 class PostCreate(CommunityRequest):
-    title: str = Field(min_length=1, max_length=160)
-    body: str = Field(min_length=1, max_length=10000)
+    title: str = Field(min_length=1, max_length=COMMUNITY_TITLE_MAX)
+    body: str = Field(min_length=1, max_length=COMMUNITY_POST_BODY_MAX)
     category: Literal["question", "discussion", "portfolio"]
 
     @field_validator("title", "body")
@@ -25,8 +27,8 @@ class PostCreate(CommunityRequest):
 
 
 class PostUpdate(CommunityRequest):
-    title: str | None = Field(default=None, min_length=1, max_length=160)
-    body: str | None = Field(default=None, min_length=1, max_length=10000)
+    title: str | None = Field(default=None, min_length=1, max_length=COMMUNITY_TITLE_MAX)
+    body: str | None = Field(default=None, min_length=1, max_length=COMMUNITY_POST_BODY_MAX)
     category: Literal["question", "discussion", "portfolio"] | None = None
 
     @field_validator("title", "body")
@@ -38,7 +40,7 @@ class PostUpdate(CommunityRequest):
 
 
 class ReplyCreate(CommunityRequest):
-    body: str = Field(min_length=1, max_length=4000)
+    body: str = Field(min_length=1, max_length=COMMUNITY_REPLY_BODY_MAX)
     parent_reply_id: uuid.UUID | None = None
 
     @field_validator("body")
@@ -50,7 +52,7 @@ class ReplyCreate(CommunityRequest):
 
 
 class ReplyUpdate(CommunityRequest):
-    body: str = Field(min_length=1, max_length=4000)
+    body: str = Field(min_length=1, max_length=COMMUNITY_REPLY_BODY_MAX)
 
     @field_validator("body")
     @classmethod

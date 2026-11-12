@@ -7,7 +7,7 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.config import Settings, get_settings
+from app.core.config import COMMUNITY_AVATAR_URL_MAX, COMMUNITY_PROFILE_NAME_MAX, Settings, get_settings
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -24,13 +24,13 @@ def _public_name(value: object) -> str:
     if not isinstance(value, str):
         return "Member"
     name = value.strip()
-    if not name or len(name) > 80 or "@" in name or any(ord(char) < 32 for char in name):
+    if not name or len(name) > COMMUNITY_PROFILE_NAME_MAX or "@" in name or any(ord(char) < 32 for char in name):
         return "Member"
     return name
 
 
 def _public_picture(value: object, settings: Settings) -> str | None:
-    if not isinstance(value, str) or len(value) > 2048:
+    if not isinstance(value, str) or len(value) > COMMUNITY_AVATAR_URL_MAX:
         return None
     try:
         parsed = urlsplit(value)
