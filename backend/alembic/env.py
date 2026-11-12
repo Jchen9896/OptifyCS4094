@@ -9,6 +9,7 @@ from app.core.db import Base
 # Import models so Base.metadata includes their tables for autogenerate and upgrades.
 from app.models import brokerage_credential as _brokerage_credential  # noqa: F401
 from app.models import chat as _chat  # noqa: F401
+from app.models import community as _community  # noqa: F401
 from app.models import knowledge_chunk as _knowledge_chunk  # noqa: F401
 from app.models import optimization_run as _optimization_run  # noqa: F401
 from app.models import portfolio as _portfolio  # noqa: F401
