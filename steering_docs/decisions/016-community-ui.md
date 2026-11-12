@@ -28,7 +28,13 @@ The client lifetime is keyed to both account and Clerk session. Request abort si
 
 Use the same CommonMark renderer in previews, feed excerpts, posts and replies. Raw HTML and Markdown images are disabled. The URL policy rejects script, data and protocol-relative schemes. Code blocks scroll inside their available width.
 
-Drafts remain in component memory after failed writes. They are not stored across accounts. Known links, Cancel, account actions and invalid-cursor reload warn before disposal. Browser unload uses the browser warning. This is not a universal blocker for browser Back, account changes or external navigation.
+Drafts remain in component memory after failed writes. They are not stored across accounts. Known links, Cancel, account actions and invalid-cursor reload warn before disposal.
+
+A dispatched write owns a temporary, data-free leave guard until settlement. It blocks known links before draft-discard prompts, explicit account actions, and competing writes. This includes post and reply creation, edits, and deletes without a dirty draft. Blocking competing writes prevents an ancestor delete from unmounting a pending descendant write. Existing Cancel controls remain disabled while their write is pending. Pending editors and delete dialogs explain that leaving does not undo the write. Browser unload requests the browser warning even for a clean delete.
+
+We chose a temporary guard over retaining write outcomes above the route. Retained outcomes need additional session-scoped state and account privacy rules. The guard reuses the existing leave boundary without caching drafts, tokens, or responses. It releases before successful route changes, after errors, and on forced unmount. Failed writes retain the existing uncertain-outcome warning and do not retry automatically.
+
+BrowserRouter does not provide a universal blocker for browser Back, forced account changes, or external navigation. Browsers control whether unload warnings appear and do not allow custom warning text. Aborting a request during forced unmount does not roll back a dispatched server write. Users must check the discussion before resubmitting an interrupted write. A forced account or session switch clears local drafts and guards. Old completions cannot navigate or update the new account, and no old-account outcome is displayed there.
 
 Delete dialogs focus Cancel first and restore the trigger on ordinary closure. Reply deletion focuses the surviving Reply action when its delete trigger disappears.
 

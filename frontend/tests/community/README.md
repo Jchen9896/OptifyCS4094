@@ -49,4 +49,8 @@ Only use an API on port 8011 that was started with the explicit isolated Communi
 
 Open `/community`. Without a signed-in account, the normal app redirects to the real Clerk login. A publishable key is not a signed-in session. Complete authenticated end-to-end checks only with an authorized test account. Do not add a production bypass.
 
-Drafts stay in component memory. Explicit links, Cancel, account menu actions and invalid-cursor reload warn before disposal. Browser unload uses the browser warning. This is not a universal SPA blocker for browser Back or external session changes.
+Drafts stay in component memory. Explicit links, Cancel, account menu actions and invalid-cursor reload warn before disposal. While a write is pending, known links and explicit sign-out are blocked, Cancel is disabled, and competing writes do not dispatch. Editors and delete dialogs warn that closing the page does not undo the write. Browser unload requests the browser warning even when deletion has no dirty draft.
+
+The deferred-write component tests exercise the real AppShell desktop and mobile account actions, route links, post creation, post edits, reply creation, reply edits, and deletes. They check that known departure cannot discard a pending result, duplicate or competing submissions do not dispatch, and settlement releases the guard. The session test forces an account switch during a dispatched write and verifies that its late completion cannot affect the new draft.
+
+This is not a universal SPA blocker for browser Back or external session changes. Browsers control unload warning availability and text. Aborting on forced unmount does not roll back a server write. After any interrupted write, check the discussion before submitting again. No old-account write outcome or draft is retained for the next account.
