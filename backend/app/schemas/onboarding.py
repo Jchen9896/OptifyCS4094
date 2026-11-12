@@ -1,5 +1,7 @@
 """Risk questionnaire definition and public questionnaire types (Decision 014)."""
 
+import uuid
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -96,6 +98,28 @@ class RiskRecommendation(BaseModel):
     # True only when the optimizer ran these settings on the portfolio holdings without a problem.
     checked: bool = False
     notes: list[str] = Field(default_factory=list)
+
+
+class RiskProfileRequest(BaseModel):
+    """Answers for one portfolio: question id to option id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answers: dict[str, str]
+
+
+class RiskProfileResponse(BaseModel):
+    portfolio_id: uuid.UUID
+    questionnaire_version: int
+    answers: dict[str, str]
+    capacity_score: float
+    willingness_score: float
+    score: float
+    # A plain string: a stored level can be from an older questionnaire version.
+    level: str
+    label: str
+    recommendation: RiskRecommendation
+    updated_at: datetime
 
 
 class PublicQuestionOption(BaseModel):

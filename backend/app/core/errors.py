@@ -196,6 +196,17 @@ class InvalidRiskAnswersError(AppError):
         super().__init__(message, code="invalid_risk_answers", status_code=422)
 
 
+class RiskProfileNotFoundError(AppError):
+    """The portfolio does not have a risk profile yet."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "This portfolio does not have a risk profile. Answer the questionnaire first.",
+            code="risk_profile_not_found",
+            status_code=404,
+        )
+
+
 class OptimizationRunNotFoundError(AppError):
     """No optimization run exists for this id and owner."""
 
