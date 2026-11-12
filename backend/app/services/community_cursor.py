@@ -26,9 +26,22 @@ def decode_cursor(value: str | None, scope: str) -> tuple[datetime, uuid.UUID] |
         raise InvalidCommunityCursorError()
     try:
         raw = base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
-        version, cursor_scope, stamp, row_id = json.loads(raw)
+        payload = json.loads(raw)
+        if not isinstance(payload, list) or len(payload) != 4:
+            raise ValueError
+        version, cursor_scope, stamp, row_id = payload
+        if (
+            type(version) is not int
+            or not isinstance(cursor_scope, str)
+            or not isinstance(stamp, str)
+            or not isinstance(row_id, str)
+        ):
+            raise ValueError
         if version != 1 or cursor_scope != scope:
             raise ValueError
-        return datetime.fromisoformat(stamp), uuid.UUID(row_id)
-    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError, binascii.Error):
+        created_at = datetime.fromisoformat(stamp)
+        if created_at.tzinfo is None or created_at.utcoffset() is None:
+            raise ValueError
+        return created_at, uuid.UUID(row_id)
+    except (ValueError, TypeError, UnicodeDecodeError, binascii.Error):
         raise InvalidCommunityCursorError() from None
