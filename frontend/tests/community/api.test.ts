@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createCommunityApi, CommunityError } from '../../src/features/community/communityApi'
+import { createCommunityApi, CommunityError, errorMessage } from '../../src/features/community/communityApi'
 import { replySchema } from '../../src/features/community/communitySchemas'
 
 export const post = {
@@ -67,6 +67,22 @@ describe('Community boundary', () => {
     finish('old-token')
     await expect(write).rejects.toMatchObject({ kind: 'session' })
     expect(requests).toBe(1)
+  })
+  it('marks an already-sent write uncertain if another request expires its session', async () => {
+    let finish: (response: Response) => void = () => {}
+    const api = createCommunityApi({
+      getToken: async () => 'token',
+      fetcher: async (_url, init) => init?.method === 'POST'
+        ? new Promise(resolve => { finish = resolve })
+        : new Response(null, { status: 401 }),
+    })
+    const write = api.createPost(post, signal())
+    await Promise.resolve()
+    await expect(api.post(post.id, signal())).rejects.toMatchObject({ kind: 'session' })
+    finish(Response.json(post))
+    const error = await write.catch(error => error)
+    expect(error).toMatchObject({ kind: 'session', uncertain: true })
+    expect(errorMessage(error, true)).toContain('may have completed')
   })
   it('rejects completions from a disposed account even when fetch ignores abort', async () => {
     let finish: (r: Response) => void = () => {}

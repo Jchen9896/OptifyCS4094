@@ -4,15 +4,17 @@ import type { PostInput } from './communitySchemas'
 
 export class CommunityError extends Error {
   readonly kind: 'session' | 'missing' | 'validation' | 'cursor' | 'unavailable' | 'invalid'
-  constructor(kind: CommunityError['kind'], message: string) {
+  readonly uncertain: boolean
+  constructor(kind: CommunityError['kind'], message: string, uncertain = false) {
     super(message)
     this.kind = kind
+    this.uncertain = uncertain
   }
 }
 
 export function errorMessage(error: unknown, write = false): string {
   const message = error instanceof CommunityError ? error.message : 'Community is unavailable. Please try again.'
-  return write && !(error instanceof CommunityError && ['validation', 'missing', 'session'].includes(error.kind))
+  return write && (!(error instanceof CommunityError) || error.uncertain || !['validation', 'missing', 'session'].includes(error.kind))
     ? message + ' The write may have completed. Check the discussion before submitting again. Your draft is kept.'
     : message
 }
@@ -22,10 +24,10 @@ export function createCommunityApi({
 }: { getToken: () => Promise<string | null>; fetcher?: typeof fetch }) {
   const lifetime = new AbortController()
   let expired = false
-  function check(signal: AbortSignal) {
+  function check(signal: AbortSignal, writeStarted = false) {
     signal.throwIfAborted()
     lifetime.signal.throwIfAborted()
-    if (expired) throw new CommunityError('session', 'Your session has expired. Sign in to continue.')
+    if (expired) throw new CommunityError('session', 'Your session has expired. Sign in to continue.', writeStarted)
   }
   async function request<T>(path: string, schema: z.ZodType<T>, signal: AbortSignal, method = 'GET', body?: unknown): Promise<T> {
     check(signal)
@@ -40,7 +42,7 @@ export function createCommunityApi({
       headers: { Authorization: 'Bearer ' + token, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
-    check(signal)
+    check(signal, method !== 'GET')
     if (!response.ok) {
       let code: unknown
       try {
@@ -48,7 +50,7 @@ export function createCommunityApi({
         const parsed = z.object({ detail: z.object({ code: z.string() }) }).safeParse(value)
         code = parsed.success ? parsed.data.detail.code : undefined
       } catch {}
-      check(signal)
+      check(signal, method !== 'GET')
       if (response.status === 401) {
         expired = true
         throw new CommunityError('session', 'Your session has expired. Sign in to continue.')
@@ -61,7 +63,7 @@ export function createCommunityApi({
     let data: unknown
     try { data = response.status === 204 ? undefined : await response.json() }
     catch { throw new CommunityError('invalid', 'Community returned an invalid response. Please reload.') }
-    check(signal)
+    check(signal, method !== 'GET')
     const result = schema.safeParse(data)
     if (!result.success) throw new CommunityError('invalid', 'Community returned an invalid response. Please reload.')
     return result.data
