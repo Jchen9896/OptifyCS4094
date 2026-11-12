@@ -1,15 +1,13 @@
 import uuid
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-
-from app.core.config import get_settings
+from sqlalchemy import text
 from app.core.current_user import CommunityPrincipal, get_community_principal
 from app.main import create_app
 
 
-def test_live_reply_with_deleted_author_is_member_but_tombstone_is_anonymous():
-    engine = create_engine(get_settings().database_url)
+def test_live_reply_with_deleted_author_is_member_but_tombstone_is_anonymous(community_test_engine):
+    engine = community_test_engine
     author_id, viewer_id, post_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     private_email = f"community-test-{author_id}@example.test"
     with engine.connect() as connection:
@@ -62,4 +60,3 @@ def test_live_reply_with_deleted_author_is_member_but_tombstone_is_anonymous():
             if post_id:
                 connection.execute(text("DELETE FROM community_posts WHERE id=:id"), {"id": post_id})
             connection.execute(text("DELETE FROM users WHERE id IN (:author,:viewer)"), {"author": author_id, "viewer": viewer_id})
-        engine.dispose()
