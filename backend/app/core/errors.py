@@ -189,6 +189,13 @@ class DuplicatePortfolioNameError(AppError):
         )
 
 
+class InvalidRiskAnswersError(AppError):
+    """The questionnaire answers are missing, unknown, or do not match the questions."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="invalid_risk_answers", status_code=422)
+
+
 class OptimizationRunNotFoundError(AppError):
     """No optimization run exists for this id and owner."""
 
