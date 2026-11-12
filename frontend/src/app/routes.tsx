@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { useAuth } from '@clerk/react'
 import AppShell from '../components/layout/AppShell.tsx'
 import LoginPage from '../features/auth/LoginPage.tsx'
+import RiskProfilePage from '../features/onboarding/RiskProfilePage.tsx'
 import ComparePage from '../features/comparison/ComparePage.tsx'
 import DashboardPage from '../features/dashboard/DashboardPage.tsx'
 import ChatPage from '../features/chat/ChatPage.tsx'
@@ -67,6 +68,7 @@ export function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="setup" element={<PortfolioSetupPage />} />
           <Route path="analyze" element={<PortfolioAnalysisPage />} />
+          <Route path="portfolios/:portfolioId/risk-profile" element={<RiskProfilePage />} />
           <Route path="compare" element={<ComparePage />} />
           <Route path="trade" element={<TradePage />} />
           <Route path="learn" element={<LearnPage />} />

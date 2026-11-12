@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ApiError } from '../../src/lib/apiClient.ts'
 import {
-  getQuestionnaire, readRiskProfile, recommendationToAnalysisSettings, saveRiskProfile,
+  getQuestionnaire, keepValidAnswers, readRiskProfile, recommendationToAnalysisSettings, saveRiskProfile,
   type RiskProfile, type RiskRecommendation,
 } from '../../src/features/onboarding/onboardingApi.ts'
 
@@ -37,6 +37,20 @@ test('rounds caps such as 0.334 and leaves the target empty for other strategies
   assert.deepEqual(
     recommendationToAnalysisSettings(recommendation({ strategy: 'min_variance', max_weight: 0.334, target_volatility: null })),
     { strategy: 'min_variance', maxWeightPercent: '33.4', targetVolatilityPercent: '' },
+  )
+})
+
+test('a retake keeps only answers that are still valid options', () => {
+  const questionnaire = {
+    version: 2,
+    questions: [
+      { id: 'goal', prompt: 'Goal?', options: [{ id: 'growth', label: 'Growth' }] },
+      { id: 'horizon', prompt: 'When?', options: [{ id: 'long', label: 'Long' }] },
+    ],
+  }
+  assert.deepEqual(
+    keepValidAnswers(questionnaire, { goal: 'growth', horizon: 'removed_option', old_question: 'x' }),
+    { goal: 'growth' },
   )
 })
 

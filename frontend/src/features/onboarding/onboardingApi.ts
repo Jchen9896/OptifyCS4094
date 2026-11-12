@@ -34,6 +34,9 @@ export type AnalysisSettings = {
   targetVolatilityPercent: string
 }
 
+/** Router state that the Apply button sends to the analysis page. */
+export type RecommendedSettingsState = { recommendedSettings: AnalysisSettings }
+
 // The analysis form shows percents with at most this many decimals.
 const PERCENT_DECIMALS = 1
 
@@ -69,6 +72,19 @@ export async function readRiskProfile(token: string, portfolioId: string): Promi
     if (caught instanceof ApiError && caught.code === 'risk_profile_not_found') return null
     throw caught
   }
+}
+
+/** Keep only the earlier answers that are still options in this questionnaire. */
+export function keepValidAnswers(
+  questionnaire: Questionnaire,
+  answers: Record<string, string>,
+): Record<string, string> {
+  const kept: Record<string, string> = {}
+  for (const question of questionnaire.questions) {
+    const answer = answers[question.id]
+    if (question.options.some((option) => option.id === answer)) kept[question.id] = answer
+  }
+  return kept
 }
 
 function percentText(value: number): string {
