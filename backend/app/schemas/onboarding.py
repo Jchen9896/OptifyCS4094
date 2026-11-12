@@ -87,6 +87,17 @@ class Questionnaire(BaseModel):
         return self
 
 
+class RiskRecommendation(BaseModel):
+    """Optimizer settings for a portfolio, and the reasons for them."""
+
+    strategy: RecommendedStrategy
+    max_weight: float = Field(gt=0, le=1)
+    target_volatility: float | None = None
+    # True only when the optimizer ran these settings on the portfolio holdings without a problem.
+    checked: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+
 class PublicQuestionOption(BaseModel):
     """An answer option without its points, so the client cannot see the scoring."""
 

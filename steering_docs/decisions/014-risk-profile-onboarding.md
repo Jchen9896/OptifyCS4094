@@ -12,7 +12,8 @@ Ask the user a short questionnaire for each portfolio. Use the answers to find a
 - Score each dimension from 0 to 100: the sum of the selected points divided by the maximum possible points. The profile score is the lower of the two scores. A user with a long horizon but low willingness is still conservative.
 - Use five levels: conservative, moderately conservative, moderate, growth, aggressive. Each level has a `min_score`. The level is the highest one whose `min_score` is not more than the profile score.
 - Each level maps to the current optimizer settings (Decision 005): `strategy`, `max_weight`, and `target_volatility` for `target_risk`. Do not recommend `target_return`, because a fixed return is often not possible for the selected stocks.
-- Before the service recommends `target_risk`, it runs `min_variance` on the portfolio holdings. If the lowest possible volatility is more than the target, it recommends `min_variance` and tells the user why.
+- If the holdings cannot add up to 100% under the level `max_weight`, the recommendation uses the smallest cap that works and tells the user.
+- Before the service shows a recommendation, it runs the recommended settings with the optimizer on the portfolio holdings and setup period. If the optimizer raises `unreachable_target` or `no_positive_excess_return`, the service recommends `min_variance` and tells the user why. If the optimizer cannot run (for example, not enough history), the service keeps the settings and marks them as not checked.
 - The API does not send answer points to the client.
 - One profile row for each portfolio. A new questionnaire replaces the old row. The row is deleted with its portfolio.
 - After the user saves a new portfolio, the frontend shows a modal that asks the user to take the questionnaire. The user can skip it.
