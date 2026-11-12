@@ -4,9 +4,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, Text, UniqueConstraint, Uuid, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
+from app.models.user import User
 
 
 class CommunityCategory(Base):
@@ -30,6 +31,7 @@ class CommunityPost(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    author: Mapped[User | None] = relationship(foreign_keys=[author_id])
 
 
 class CommunityReply(Base):
@@ -61,3 +63,4 @@ class CommunityReply(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    author: Mapped[User | None] = relationship(foreign_keys=[author_id])

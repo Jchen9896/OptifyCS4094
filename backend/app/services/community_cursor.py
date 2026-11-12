@@ -25,7 +25,7 @@ def decode_cursor(value: str | None, scope: str) -> tuple[datetime, uuid.UUID] |
     if len(value) > 1024:
         raise InvalidCommunityCursorError()
     try:
-        raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        raw = base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
         version, cursor_scope, stamp, row_id = json.loads(raw)
         if version != 1 or cursor_scope != scope:
             raise ValueError
