@@ -1,26 +1,10 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
+import { useDraftWarning } from './communityDrafts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CommunityMarkdown } from './CommunityMarkdown'
 import { limits } from './communitySchemas'
 import type { Category, PostInput } from './communitySchemas'
-
-function useDraftWarning(dirty: boolean) {
-  useEffect(() => {
-    if (!dirty) return
-    const unload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-    const navigate = (event: MouseEvent) => {
-      const target = event.target
-      if (target instanceof Element && target.closest('a[href]') && !window.confirm('Discard your unsaved draft?')) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
-    }
-    window.addEventListener('beforeunload', unload)
-    document.addEventListener('click', navigate, true)
-    return () => { window.removeEventListener('beforeunload', unload); document.removeEventListener('click', navigate, true) }
-  }, [dirty])
-}
 
 export function MarkdownEditor({ value, onChange, maxLength, label, disabled = false }: {
   value: string; onChange: (value: string) => void; maxLength: number; label: string; disabled?: boolean

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { CommunityError, errorMessage } from './communityApi'
 import { useCommunity } from './CommunityContext'
+import { requestCommunityLeave } from './communityDrafts'
 import { useCommunityMutation } from './useCommunityRequests'
 import type { Author } from './communitySchemas'
 import type { PageState } from './useCommunityRequests'
@@ -40,7 +41,8 @@ export function PageContinuation<T>({ state, more, reload }: { state: PageState<
   const continuation = state.data.continuation
   return <div className="space-y-3">
     {continuation.kind === 'error' && <CommunityFailure error={continuation.error} retry={
-      continuation.error instanceof CommunityError && continuation.error.kind === 'cursor' ? reload : more
+      continuation.error instanceof CommunityError && continuation.error.kind === 'cursor'
+        ? () => { if (requestCommunityLeave()) reload() } : more
     } />}
     {state.data.next_cursor && <Button variant="outline" disabled={continuation.kind === 'loading'} onClick={more}>
       {continuation.kind === 'loading' ? 'Loading…' : 'Load more'}
