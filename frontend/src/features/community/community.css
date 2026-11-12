@@ -1,0 +1,15 @@
+.community-markdown { overflow-wrap: anywhere; min-width: 0; line-height: 1.7; font-size: .875rem; }
+.community-markdown > * + * { margin-top: 1rem; }
+.community-markdown h1, .community-markdown h2, .community-markdown h3 { font-weight: 600; line-height: 1.4; }
+.community-markdown h1 { font-size: 1.5rem; }
+.community-markdown h2 { font-size: 1.25rem; }
+.community-markdown h3 { font-size: 1.125rem; }
+.community-markdown ul { list-style: disc; padding-left: 1.5rem; }
+.community-markdown ol { list-style: decimal; padding-left: 1.5rem; }
+.community-markdown a { color: var(--primary); text-decoration: underline; }
+.community-markdown blockquote { border-left: 3px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); }
+.community-markdown pre { max-width: 100%; overflow-x: auto; background: var(--muted); padding: 1rem; border-radius: var(--radius); }
+.community-markdown code { font-size: .85em; overflow-wrap: anywhere; }
+.community-markdown pre code { overflow-wrap: normal; white-space: pre; }
+.community-editor { width: 100%; min-height: 10rem; resize: vertical; border: 1px solid var(--input); border-radius: var(--radius); padding: .75rem; background: var(--card); font-size: .875rem; }
+.community-editor:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
