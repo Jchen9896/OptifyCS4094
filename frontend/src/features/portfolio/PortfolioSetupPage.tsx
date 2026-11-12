@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { ApiError } from '@/lib/apiClient'
 import { ensureHoldingsPrices } from '../history-period/historyApi.ts'
+import RiskSurveyPrompt from '../onboarding/RiskSurveyPrompt.tsx'
 import StockSearch from '../stock-search/components/StockSearch.tsx'
 import type { StockSearchResult } from '../stock-search/stockApi.ts'
 import { useActivePortfolio } from './ActivePortfolioContext.tsx'
@@ -84,6 +85,7 @@ export default function PortfolioSetupPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveNote, setSaveNote] = useState<string | null>(null)
+  const [surveyPortfolio, setSurveyPortfolio] = useState<{ id: string; name: string } | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importNotes, setImportNotes] = useState<string[]>([])
   const [brokerage, setBrokerage] = useState<BrokerageId>('schwab')
@@ -233,6 +235,7 @@ export default function PortfolioSetupPage() {
       const saved = await createPortfolio(token, draft)
       noteSaved(saved)
       setSaveNote('Portfolio saved. Continue in Portfolio analysis to run a strategy.')
+      setSurveyPortfolio({ id: saved.id, name: saved.name })
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'duplicate_portfolio_name') {
         setSaveNote('A portfolio with this name already exists. Open it from the dashboard switcher.')
@@ -447,6 +450,7 @@ export default function PortfolioSetupPage() {
           </div>
         </CardFooter>
       </Card>
+      <RiskSurveyPrompt portfolio={surveyPortfolio} onClose={() => setSurveyPortfolio(null)} />
     </div>
   )
 }
