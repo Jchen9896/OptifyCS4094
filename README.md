@@ -46,7 +46,7 @@ Fill in the three Clerk values in the root `.env`:
 - `CLERK_ISSUER` is the Frontend API URL from Clerk Domains.
 - `CLERK_JWT_KEY` is the full PEM public key from API Keys → Show JWT public key → PEM Public Key. Put the multiline key between single quotes.
 
-In the Clerk development dashboard, enable email/password with email verification and Google sign-in. Under Configure → Sessions → Customize session token, set the Claims JSON to `{ "email": "{{user.primary_email_address}}" }` and save. The Clerk secret key is not used. Teammates can use the same three public values in their own ignored root `.env`.
+In the Clerk development dashboard, enable email/password with email verification and Google sign-in. Under Configure → Sessions → Customize session token, set the claims JSON to `{ "email": "{{user.primary_email_address}}", "name": "{{user.full_name}}", "picture": "{{user.image_url}}" }` and save. Community treats `name` and `picture` as optional. Missing or invalid names display as `Member`; pictures use only the configured Clerk image hosts. The Clerk secret key is not used. Teammates can use the same three public values in their own ignored root `.env`.
 
 For the Assistant (Decision 013), also set `GEMINI_API_KEY` in `.env`.
 
